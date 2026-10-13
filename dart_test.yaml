@@ -1,0 +1,4 @@
+tags:
+  # Pixel comparisons against images recorded on macOS. CI runs them on its
+  # macOS runner only, since Linux anti-aliases edges and text differently.
+  golden:

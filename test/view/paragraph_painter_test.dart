@@ -257,5 +257,6 @@ void main() {
       find.byType(RepaintBoundary).first,
       matchesGoldenFile('goldens/paragraph_labels.png'),
     );
-  });
+    // Recorded on macOS: other platforms anti-alias slightly differently.
+  }, tags: ['golden']);
 }

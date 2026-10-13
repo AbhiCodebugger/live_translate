@@ -7,10 +7,10 @@ Defines the public surface of the `live_translate` package: what one import prov
 ## Requirements
 
 ### Requirement: Single entry library
-The package SHALL expose its public API through one library, `package:live_translate_overlay/live_translate_overlay.dart`. That library SHALL export only the documented public symbols. Implementation details under `lib/src/` SHALL NOT be exported.
+The package SHALL expose its public API through one library, `package:live_translate/live_translate.dart`. That library SHALL export only the documented public symbols. Implementation details under `lib/src/` SHALL NOT be exported.
 
 #### Scenario: One import is enough
-- **WHEN** a consumer imports only `package:live_translate_overlay/live_translate_overlay.dart`
+- **WHEN** a consumer imports only `package:live_translate/live_translate.dart`
 - **THEN** `LiveTranslateView`, `LiveTranslateController`, `LiveTranslateState`, `TranslatedLine`, `TextScript`, `OverlayStyle`, `TranslationModels`, `LiveTranslateException` and all its subtypes resolve without further imports
 
 #### Scenario: Internal mapping is not exported
@@ -44,7 +44,7 @@ The view's constructor parameters for injecting a camera session, engines and a 
 The entry library SHALL re-export the third-party types the public API uses: `TranslateLanguage` and `ResolutionPreset`. It SHALL NOT re-export any other symbols from those dependencies.
 
 #### Scenario: Consumer uses a language without a direct dependency
-- **WHEN** a consumer depends only on `live_translate_overlay` and refers to `TranslateLanguage.english`
+- **WHEN** a consumer depends only on `live_translate` and refers to `TranslateLanguage.english`
 - **THEN** the code compiles and does not trigger the `depend_on_referenced_packages` lint
 
 #### Scenario: Unrelated dependency symbols stay hidden

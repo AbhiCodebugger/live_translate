@@ -20,7 +20,7 @@
 ## 4. Repository and final check
 
 - [x] 4.1 Verify that `git grep -n -I -e live_translate_overlay -e liveTranslateOverlay -- . ':!openspec/changes/archive'` finds nothing. Run `dart format --set-exit-if-changed .`, and run `flutter pub publish --dry-run` to check that the archive is named `live_translate` (ignoring the uncommitted-files warning).
-- [ ] 4.2 Once the user has run `git init` and created the empty GitHub repository `AbhiCodebugger/live_translate`: check with `git status` that `PLUGIN_PLAN.md`, `build/`, `coverage/` and `.dart_tool/` aren't listed, and that `.claude/`, `openspec/` and `doc/images/demo.gif` are. Then `git remote add origin https://github.com/AbhiCodebugger/live_translate.git`. After the user's first push, verify that `git ls-remote origin HEAD` answers, and that the README's GIF URL returns 200.
+- [x] 4.2 Once the user has run `git init` and created the empty GitHub repository `AbhiCodebugger/live_translate`: check with `git status` that `PLUGIN_PLAN.md`, `build/`, `coverage/` and `.dart_tool/` aren't listed, and that `.claude/`, `openspec/` and `doc/images/demo.gif` are. Then `git remote add origin https://github.com/AbhiCodebugger/live_translate.git`. After the user's first push, verify that `git ls-remote origin HEAD` answers, and that the README's GIF URL returns 200.
 
 ## Workflow follow-up
 

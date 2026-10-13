@@ -26,7 +26,8 @@ jobs:
       - run: flutter pub get
       - run: dart format --set-exit-if-changed .
       - run: flutter analyze
-      - run: flutter test --coverage
+      # Golden tests run in the macOS job below.
+      - run: flutter test --coverage --exclude-tags golden
       - name: Example tests
         working-directory: example
         run: flutter test
@@ -52,7 +53,7 @@ jobs:
         run: flutter build apk --debug
 
   ios:
-    name: Build example for iOS
+    name: Golden tests and iOS build
     needs: package
     runs-on: macos-latest
     steps:
@@ -62,6 +63,8 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Golden tests
+        run: flutter test --tags golden
       - name: Build without code signing
         working-directory: example
         run: flutter build ios --debug --no-codesign
