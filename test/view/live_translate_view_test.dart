@@ -1,0 +1,1190 @@
+import 'dart:async';
+
+import 'package:camera/camera.dart' show CameraImage;
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart'
+    show TranslateLanguage;
+import 'package:live_translate/src/camera/camera_frame.dart';
+import 'package:live_translate/src/controller/live_translate_controller.dart';
+import 'package:live_translate/src/controller/live_translate_state.dart';
+import 'package:live_translate/src/engines/language_engine.dart';
+import 'package:live_translate/src/engines/text_engine.dart';
+import 'package:live_translate/src/errors.dart';
+import 'package:live_translate/src/geometry/image_rotation.dart';
+import 'package:live_translate/src/models/overlay_style.dart';
+import 'package:live_translate/src/models/text_script.dart';
+import 'package:live_translate/src/view/live_translate_view.dart';
+import 'package:live_translate/src/view/paragraph_painter.dart';
+
+import '../support/fakes.dart';
+import '../support/frames.dart';
+
+// Frames are 1280 × 720, turned 90° clockwise to an upright 720 × 1280, and
+// shown in a 360 × 800 view at scale 0.625, offset -45 horizontally. Raw +x
+// is upright +y.
+const _box = Rect.fromLTRB(100, 200, 300, 260);
+const _mappedBox = Rect.fromLTRB(17.5, 125, 142.5, 162.5);
+const _below = Rect.fromLTRB(100, 270, 300, 330);
+
+/// A Hindi paragraph long enough to confirm its language in one read.
+const _hindi = 'मेरा नाम राम है और मैं दिल्ली में रहता हूँ यहाँ';
+
+// Building a textured frame is slow, so each is built once.
+final _images = <(double, double, int), CameraImage>{};
+
+CameraImage _image({double dx = 0, double dy = 0, int seed = 1}) =>
+    _images.putIfAbsent((
+      dx,
+      dy,
+      seed,
+    ), () => texturedImage(dx: dx, dy: dy, seed: seed));
+
+/// Records every engine the view builds, so tests can inspect and drive
+/// them.
+final class _Engines {
+  final texts = <FakeTextEngine>[];
+  final scripts = <Set<TextScript>>[];
+  final languages = <FakeLanguageEngine>[];
+  final translators = <FakeTranslateEngine>[];
+  final models = FakeModelStore()
+    ..present.addAll({
+      TranslateLanguage.english,
+      TranslateLanguage.french,
+      TranslateLanguage.german,
+      TranslateLanguage.spanish,
+      TranslateLanguage.hindi,
+    });
+  final guesses = <String, List<LanguageGuess>>{
+    'Salida': const [LanguageGuess('es', 0.9)],
+    'Entrada': const [LanguageGuess('es', 0.9)],
+    'Salida de emergencia': const [LanguageGuess('es', 0.9)],
+    'नमस्ते': const [LanguageGuess('hi', 0.9)],
+    _hindi: const [LanguageGuess('hi', 0.95)],
+  };
+  List<RecognizedLine> _lines = const [];
+
+  /// Sets the lines every text engine, current and future, recognizes.
+  set lines(List<RecognizedLine> lines) {
+    _lines = lines;
+    for (final text in texts) {
+      text.lines = lines;
+    }
+  }
+
+  /// How many reads all text engines have made.
+  int get reads => texts.fold(0, (sum, text) => sum + text.calls);
+
+  LiveTranslateEngines build() => (
+    text: (scripts) {
+      this.scripts.add(scripts);
+      final text = FakeTextEngine()..lines = _lines;
+      texts.add(text);
+      return text;
+    },
+    language: () {
+      final language = FakeLanguageEngine()..guesses.addAll(guesses);
+      languages.add(language);
+      return language;
+    },
+    translate: () {
+      final translator = FakeTranslateEngine();
+      translators.add(translator);
+      return translator;
+    },
+    models: models,
+  );
+}
+
+/// A one-line paragraph; lines in different boxes are separate paragraphs.
+RecognizedLine _line(String text, [Rect box = _box]) =>
+    RecognizedLine(text: text, box: box, paragraph: box.top.round());
+
+void main() {
+  late FakeCameraSession session;
+  late _Engines engines;
+  late List<LiveTranslateException> errors;
+  late DateTime clock;
+
+  setUp(() {
+    session = FakeCameraSession();
+    engines = _Engines();
+    errors = [];
+    clock = DateTime(2026);
+  });
+
+  Widget app({
+    TranslateLanguage target = TranslateLanguage.english,
+    bool deviceTarget = false,
+    Set<TextScript>? scripts,
+    Set<TranslateLanguage>? sourceLanguages,
+    LiveTranslateController? controller,
+    OverlayStyle style = const OverlayStyle(),
+  }) => MaterialApp(
+    home: LiveTranslateView(
+      targetLanguage: deviceTarget ? null : target,
+      scripts: scripts ?? const {TextScript.latin, TextScript.devanagari},
+      sourceLanguages: sourceLanguages,
+      style: style,
+      onError: errors.add,
+      controller: controller,
+      createSession: (_) => session,
+      createEngines: engines.build,
+      now: () => clock,
+    ),
+  );
+
+  Future<void> pumpView(WidgetTester tester, [Widget? widget]) async {
+    tester.view
+      ..physicalSize = const Size(360, 800)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(widget ?? app());
+    await tester.pump();
+  }
+
+  /// Delivers one frame 33 ms after the previous one, with its content moved
+  /// by ([dx], [dy]) raw pixels from the first scene, or a different scene.
+  Future<void> deliver(
+    WidgetTester tester, {
+    double dx = 0,
+    double dy = 0,
+    int seed = 1,
+    int? generation,
+  }) async {
+    clock = clock.add(const Duration(milliseconds: 33));
+    session.emit(
+      CameraFrame(
+        image: _image(dx: dx, dy: dy, seed: seed),
+        rotation: ImageRotation.deg90,
+        generation: generation ?? session.generation,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+  }
+
+  /// Holds the camera still for about 400 ms, long enough to settle and
+  /// read, and lets the read finish.
+  Future<void> settle(
+    WidgetTester tester, {
+    double dx = 0,
+    double dy = 0,
+    int seed = 1,
+  }) async {
+    for (var i = 0; i < 13; i++) {
+      await deliver(tester, dx: dx, dy: dy, seed: seed);
+    }
+    await tester.pump();
+  }
+
+  List<ParagraphLabel> labels(WidgetTester tester) {
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is ParagraphPainter,
+      ),
+    );
+    return (paint.painter! as ParagraphPainter).labels;
+  }
+
+  Finder spinner() => find.byType(CircularProgressIndicator);
+
+  group('translation', () {
+    testWidgets("a paragraph's label covers its text", (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      final label = labels(tester).single;
+      expect(label.rect, _mappedBox);
+      expect(label.text, '[en] Salida');
+      expect(label.opacity, 1);
+    });
+
+    testWidgets('an untranslated line has no label', (tester) async {
+      engines.lines = [_line('OK')];
+      await pumpView(tester);
+      await settle(tester);
+      expect(labels(tester), isEmpty);
+    });
+
+    testWidgets('a translation equal to the line draws no label', (
+      tester,
+    ) async {
+      // Paragraphs are trimmed when their lines are joined.
+      engines.guesses['एला'] = const [LanguageGuess('hi', 0.9)];
+      engines.lines = [_line(' एला '), _line('Salida', _below)];
+      await pumpView(tester);
+      engines.translators.single.unchanged.add('एला');
+      await settle(tester);
+      // The line was translated, but only back to itself.
+      expect(engines.translators.single.translated, contains('एला'));
+      expect(labels(tester).map((l) => l.text), ['[en] Salida']);
+    });
+
+    testWidgets('reads Latin and Devanagari by default', (tester) async {
+      await pumpView(tester);
+      expect(engines.scripts.single, {TextScript.latin, TextScript.devanagari});
+    });
+
+    testWidgets('reads only Latin when asked to', (tester) async {
+      await pumpView(tester, app(scripts: const {TextScript.latin}));
+      expect(engines.scripts.single, {TextScript.latin});
+    });
+
+    testWidgets('both scripts are read in one read', (tester) async {
+      engines.lines = [_line('Salida'), _line('नमस्ते', _below)];
+      await pumpView(tester);
+      await settle(tester);
+      expect(engines.reads, 1);
+      expect(labels(tester).map((l) => l.text), ['[en] Salida', '[en] नमस्ते']);
+    });
+
+    testWidgets('a single source language skips identification', (
+      tester,
+    ) async {
+      engines.lines = [_line('नमस्ते')];
+      await pumpView(
+        tester,
+        app(sourceLanguages: const {TranslateLanguage.hindi}),
+      );
+      await settle(tester);
+      expect(labels(tester).single.text, '[en] नमस्ते');
+      expect(engines.languages.single.identified, isEmpty);
+    });
+
+    testWidgets("an unsampled page uses the style's colours", (tester) async {
+      // A box outside the frame can't be sampled.
+      engines.lines = [
+        _line('Salida', const Rect.fromLTRB(900, 1500, 1000, 1540)),
+      ];
+      await pumpView(
+        tester,
+        app(
+          style: const OverlayStyle(
+            backgroundColor: Color(0xFFFFEB3B),
+            textColor: Color(0xFF000000),
+          ),
+        ),
+      );
+      await settle(tester);
+      final label = labels(tester).single;
+      expect(label.background, const Color(0xFFFFEB3B));
+      expect(label.ink, const Color(0xFF000000));
+    });
+  });
+
+  group('settling', () {
+    testWidgets('nothing is read while the camera sweeps', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      for (var i = 0; i < 20; i++) {
+        await deliver(tester, dx: i * 20.0);
+      }
+      expect(engines.reads, 0);
+      expect(labels(tester), isEmpty);
+    });
+
+    testWidgets('200 ms steady reads nothing; 300 ms reads once', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      for (var i = 0; i < 7; i++) {
+        await deliver(tester);
+      }
+      expect(engines.reads, 0);
+      await settle(tester);
+      expect(engines.reads, 1);
+      expect(labels(tester).single.text, '[en] Salida');
+    });
+
+    testWidgets('holding still reads nothing more', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      for (var i = 0; i < 60; i++) {
+        await deliver(tester);
+      }
+      expect(engines.reads, 1);
+    });
+
+    testWidgets('held labels follow a drift', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      for (var dx = 10.0; dx <= 30; dx += 10) {
+        await deliver(tester, dx: dx);
+      }
+      // 30 raw pixels right is 30 upright pixels down: 18.75 in the view.
+      final rect = labels(tester).single.rect;
+      expect(rect.top, closeTo(_mappedBox.top + 18.75, 2));
+      expect(rect.left, closeTo(_mappedBox.left, 2));
+      expect(engines.reads, 1);
+    });
+
+    testWidgets("movement during a read moves that read's labels", (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      engines.texts.single.gate = Completer<void>();
+      await settle(tester);
+      expect(engines.reads, 1);
+      await deliver(tester, dx: 10);
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(labels(tester).single.rect.top, closeTo(_mappedBox.top + 6.25, 2));
+    });
+
+    testWidgets('a fast swing fades the labels out', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      await deliver(tester, dx: 150);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(labels(tester).single.opacity, inExclusiveRange(0, 1));
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(labels(tester), isEmpty);
+    });
+
+    testWidgets('a new scene fades the labels out', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      await deliver(tester, seed: 7);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(labels(tester), isEmpty);
+    });
+
+    testWidgets('after a pan the new area is read; old labels stay meanwhile', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      // 256 raw pixels right is 20% of the upright height.
+      for (var dx = 32.0; dx <= 256; dx += 32) {
+        await deliver(tester, dx: dx);
+      }
+      engines.lines = [_line('Entrada')];
+      engines.texts.single.gate = Completer<void>();
+      await settle(tester, dx: 256);
+      expect(engines.reads, 2);
+      expect(labels(tester).single.text, '[en] Salida');
+
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(labels(tester).single.text, '[en] Entrada');
+    });
+
+    testWidgets('a small drift does not read again', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      // 28 raw pixels down is 4% of the upright width.
+      await deliver(tester, dy: 14);
+      await deliver(tester, dy: 28);
+      await settle(tester, dy: 28);
+      expect(engines.reads, 1);
+    });
+
+    testWidgets('a completed download reads the held frame again', (
+      tester,
+    ) async {
+      engines.models.present.remove(TranslateLanguage.hindi);
+      engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line(_hindi)];
+      await pumpView(tester);
+      await settle(tester);
+      expect(engines.models.downloads.map((d) => d.$1), [
+        TranslateLanguage.hindi,
+      ]);
+      expect(labels(tester), isEmpty);
+
+      engines.models.downloadGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(engines.reads, 2);
+      expect(labels(tester).single.text, '[en] $_hindi');
+    });
+
+    testWidgets('a completed target download reads the held frame again', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      expect(labels(tester).single.text, '[en] Salida');
+
+      engines.models.present.remove(TranslateLanguage.german);
+      engines.models.downloadGate = Completer<void>();
+      await tester.pumpWidget(app(target: TranslateLanguage.german));
+      await tester.pump();
+      await tester.pump();
+      expect(engines.reads, 2);
+      expect(labels(tester), isEmpty);
+
+      // No frames arrive: the camera hasn't moved.
+      engines.models.downloadGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(engines.reads, 3);
+      expect(labels(tester).single.text, '[de] Salida');
+    });
+
+    testWidgets('a download completing during a read reads again after it', (
+      tester,
+    ) async {
+      engines.models.present.remove(TranslateLanguage.hindi);
+      engines.models.downloadGate = Completer<void>();
+      engines.lines = [
+        _line(_hindi),
+        _line('Salida', const Rect.fromLTRB(100, 300, 300, 360)),
+      ];
+      await pumpView(tester);
+      final translation = Completer<void>();
+      engines.translators.single.gate = translation;
+      await settle(tester);
+      expect(engines.models.downloads.map((d) => d.$1), [
+        TranslateLanguage.hindi,
+      ]);
+
+      // The Hindi model arrives while the Spanish paragraph is translated.
+      engines.models.downloadGate!.complete();
+      await tester.pump();
+      translation.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(engines.reads, 2);
+      expect(labels(tester).map((label) => label.text), [
+        '[en] $_hindi',
+        '[en] Salida',
+      ]);
+    });
+
+    testWidgets('a completed target download reads a frozen frame again', (
+      tester,
+    ) async {
+      final controller = LiveTranslateController();
+      addTearDown(controller.dispose);
+      engines.lines = [_line('Salida')];
+      await pumpView(tester, app(controller: controller));
+      await settle(tester);
+      await controller.freeze();
+      await tester.pump();
+
+      engines.models.present.remove(TranslateLanguage.german);
+      engines.models.downloadGate = Completer<void>();
+      await controller.setTargetLanguage(TranslateLanguage.german);
+      await tester.pump();
+      await tester.pump();
+      expect(labels(tester), isEmpty);
+
+      engines.models.downloadGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(labels(tester).single.text, '[de] Salida');
+      expect(controller.state, LiveTranslateState.frozen);
+    });
+
+    testWidgets('no second read starts while one runs', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      engines.texts.single.gate = Completer<void>();
+      await settle(tester);
+      for (var i = 0; i < 30; i++) {
+        await deliver(tester);
+      }
+      expect(engines.reads, 1);
+      engines.texts.single.gate!.complete();
+    });
+
+    testWidgets('a read that ends after backgrounding is not shown', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      engines.texts.single.gate = Completer<void>();
+      await settle(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(labels(tester), isEmpty);
+    });
+
+    testWidgets('a failed read is reported and retried after moving', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      engines.texts.single.error = StateError('recognizer crashed');
+      await settle(tester);
+      expect(errors.whereType<PipelineFailure>(), hasLength(1));
+      expect(labels(tester), isEmpty);
+
+      engines.texts.single.error = null;
+      await settle(tester);
+      expect(engines.reads, 1);
+
+      await deliver(tester, dx: 40);
+      await settle(tester, dx: 40);
+      expect(engines.reads, 2);
+      expect(labels(tester).single.text, '[en] Salida');
+    });
+
+    testWidgets('ignores frames from an older session', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      for (var i = 0; i < 13; i++) {
+        await deliver(tester, generation: session.generation - 1);
+      }
+      expect(engines.reads, 0);
+    });
+  });
+
+  group('device language', () {
+    Future<void> pumpOnDevice(WidgetTester tester, Locale locale) async {
+      tester.platformDispatcher.localeTestValue = locale;
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      await pumpView(tester, app(deviceTarget: true));
+    }
+
+    testWidgets('no target on an English phone translates into English', (
+      tester,
+    ) async {
+      engines.lines = [_line('नमस्ते')];
+      await pumpOnDevice(tester, const Locale('en', 'US'));
+      await settle(tester);
+      expect(labels(tester).single.text, '[en] नमस्ते');
+    });
+
+    testWidgets('no target on a French phone translates into French', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpOnDevice(tester, const Locale('fr', 'FR'));
+      // The French model is checked before any frame arrives.
+      expect(engines.models.checks, contains(TranslateLanguage.french));
+      await settle(tester);
+      expect(labels(tester).single.text, '[fr] Salida');
+    });
+
+    testWidgets('a device language without a model falls back to English', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpOnDevice(tester, const Locale('am', 'ET'));
+      await settle(tester);
+      expect(labels(tester).single.text, '[en] Salida');
+    });
+
+    testWidgets('the controller still wins over the device language', (
+      tester,
+    ) async {
+      final controller = LiveTranslateController();
+      addTearDown(controller.dispose);
+      tester.platformDispatcher.localeTestValue = const Locale('fr', 'FR');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      engines.lines = [_line('Salida')];
+      await pumpView(tester, app(deviceTarget: true, controller: controller));
+      await controller.setTargetLanguage(TranslateLanguage.german);
+      await tester.pump();
+      await settle(tester);
+      expect(labels(tester).single.text, '[de] Salida');
+    });
+  });
+
+  group('settings changes', () {
+    testWidgets('a new target re-reads the held frame without a restart', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      expect(labels(tester).single.text, '[en] Salida');
+
+      await tester.pumpWidget(app(target: TranslateLanguage.french));
+      await tester.pump();
+      await tester.pump();
+
+      expect(engines.texts.first.closes, 1);
+      expect(engines.languages.first.closes, 1);
+      expect(engines.translators.first.closes, 1);
+      expect(session.starts, 1);
+      expect(labels(tester).single.text, '[fr] Salida');
+    });
+
+    testWidgets('a read from before the change is not shown', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      engines.texts.single.gate = Completer<void>();
+      await settle(tester);
+      await tester.pumpWidget(app(target: TranslateLanguage.french));
+      await tester.pump();
+      engines.texts.first.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(labels(tester), isEmpty);
+
+      await deliver(tester, dx: 40);
+      await settle(tester, dx: 40);
+      expect(labels(tester).single.text, '[fr] Salida');
+    });
+
+    testWidgets('equal settings keep the engines', (tester) async {
+      await pumpView(
+        tester,
+        app(scripts: const {TextScript.latin, TextScript.devanagari}),
+      );
+      await tester.pumpWidget(
+        app(scripts: {TextScript.devanagari, TextScript.latin}),
+      );
+      await tester.pump();
+      expect(engines.texts, hasLength(1));
+      expect(engines.texts.single.closes, 0);
+    });
+
+    testWidgets('a new source-language hint replaces the engines', (
+      tester,
+    ) async {
+      await pumpView(tester);
+      await tester.pumpWidget(
+        app(sourceLanguages: const {TranslateLanguage.hindi}),
+      );
+      await tester.pump();
+      expect(engines.texts, hasLength(2));
+      expect(engines.texts.first.closes, 1);
+    });
+  });
+
+  group('errors', () {
+    testWidgets('a camera permission error is reported and shown', (
+      tester,
+    ) async {
+      session.startError = const CameraPermissionDenied();
+      await pumpView(tester);
+      expect(errors.single, isA<CameraPermissionDenied>());
+      expect(find.textContaining('CameraPermissionDenied'), findsOneWidget);
+    });
+
+    testWidgets('a missing model is reported once', (tester) async {
+      engines.models.present.remove(TranslateLanguage.hindi);
+      engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line(_hindi)];
+      await pumpView(tester);
+      await settle(tester);
+      // A pan of 160 raw pixels (12.5% of the upright height) reads again.
+      for (var dx = 32.0; dx <= 160; dx += 32) {
+        await deliver(tester, dx: dx);
+      }
+      await settle(tester, dx: 160);
+      expect(engines.reads, 2);
+      expect(engines.models.downloads, hasLength(1));
+      final error = errors.single as ModelNotDownloaded;
+      expect(error.language, TranslateLanguage.hindi);
+      expect(labels(tester), isEmpty);
+    });
+  });
+
+  group('camera', () {
+    testWidgets('shows a placeholder while the camera starts', (tester) async {
+      session.startGate = Completer<void>();
+      await pumpView(tester);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byKey(FakeCameraSession.previewKey), findsNothing);
+
+      session.startGate!.complete();
+      await tester.pump();
+      expect(find.byKey(FakeCameraSession.previewKey), findsOneWidget);
+    });
+
+    testWidgets('lays out the preview with the shared layout', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      await settle(tester);
+      expect(
+        tester.getRect(find.byKey(FakeCameraSession.previewKey)),
+        const Rect.fromLTRB(-45, 0, 405, 800),
+      );
+    });
+
+    testWidgets('uses the reported preview size before the first frame', (
+      tester,
+    ) async {
+      await pumpView(tester);
+      expect(
+        tester.getRect(find.byKey(FakeCameraSession.previewKey)),
+        const Rect.fromLTRB(-45, 0, 405, 800),
+      );
+      expect(labels(tester), isEmpty);
+    });
+
+    testWidgets('stops when inactive and restarts the camera', (tester) async {
+      await pumpView(tester);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      expect(session.stops, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(session.starts, 2);
+      expect(find.byKey(FakeCameraSession.previewKey), findsOneWidget);
+    });
+
+    testWidgets('releases every engine and the session on dispose', (
+      tester,
+    ) async {
+      await pumpView(tester);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(engines.texts.single.closes, 1);
+      expect(engines.languages.single.closes, 1);
+      expect(engines.translators.single.closes, 1);
+      expect(session.disposes, 1);
+    });
+  });
+
+  group('controller', () {
+    late LiveTranslateController controller;
+    late List<LiveTranslateState> states;
+
+    setUp(() {
+      controller = LiveTranslateController();
+      states = [];
+      controller.addListener(() {
+        if (states.isEmpty || states.last != controller.state) {
+          states.add(controller.state);
+        }
+      });
+    });
+
+    Future<void> pumpControlled(
+      WidgetTester tester, {
+      TranslateLanguage target = TranslateLanguage.english,
+    }) => pumpView(tester, app(target: target, controller: controller));
+
+    Future<void> freeze(WidgetTester tester) async {
+      await controller.freeze();
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('reports initializing, then running', (tester) async {
+      session.startGate = Completer<void>();
+      await pumpControlled(tester);
+      expect(controller.state, LiveTranslateState.initializing);
+      session.startGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(controller.state, LiveTranslateState.running);
+      expect(states, contains(LiveTranslateState.running));
+    });
+
+    testWidgets('reports error when permission is denied', (tester) async {
+      session.startError = const CameraPermissionDenied();
+      await pumpControlled(tester);
+      await tester.pump();
+      expect(controller.state, LiveTranslateState.error);
+    });
+
+    testWidgets('reports any other start failure as CameraUnavailable', (
+      tester,
+    ) async {
+      session.startError = const CameraUnavailable();
+      await pumpControlled(tester);
+      await tester.pump();
+      expect(errors.single, isA<CameraUnavailable>());
+      expect(controller.state, LiveTranslateState.error);
+      expect(find.text('${const CameraUnavailable()}'), findsOneWidget);
+    });
+
+    testWidgets('a failed pause is reported and the view stays frozen', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      session.pauseError = const CameraUnavailable();
+      await controller.freeze(); // Completes without throwing.
+      await tester.pump();
+      await tester.pump();
+      expect(errors.single, isA<CameraUnavailable>());
+      expect(controller.state, LiveTranslateState.frozen);
+      expect(labels(tester).single.text, '[en] Salida');
+    });
+
+    testWidgets('a failed resume is reported and shows the error state', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      await freeze(tester);
+      session.resumeError = const CameraUnavailable();
+      await controller.resume(); // Completes without throwing.
+      await tester.pump();
+      await tester.pump();
+      expect(errors.single, isA<CameraUnavailable>());
+      expect(controller.state, LiveTranslateState.error);
+    });
+
+    testWidgets('exposes the shown paragraphs', (tester) async {
+      await pumpControlled(tester);
+      await tester.pump();
+      expect(controller.lines, isEmpty);
+
+      engines.lines = [_line('Salida')];
+      await settle(tester);
+      await tester.pump();
+      final line = controller.lines.single;
+      expect(line.rect, _mappedBox);
+      expect(line.translatedText, '[en] Salida');
+    });
+
+    testWidgets('lines follow the labels', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      await deliver(tester, dx: 16);
+      await tester.pump();
+      // 16 raw pixels right is 10 view pixels down.
+      expect(controller.lines.single.rect.top, closeTo(_mappedBox.top + 10, 2));
+    });
+
+    testWidgets('lines hold a paragraph as one entry', (tester) async {
+      engines.lines = const [
+        RecognizedLine(text: 'Salida de', box: _box),
+        RecognizedLine(text: 'emergencia', box: _below),
+      ];
+      await pumpControlled(tester);
+      await settle(tester);
+      await tester.pump();
+      final line = controller.lines.single;
+      expect(line.sourceText, 'Salida de emergencia');
+      expect(line.translatedText, '[en] Salida de emergencia');
+      expect(line.rect, const Rect.fromLTRB(17.5, 125, 142.5, 206.25));
+    });
+
+    testWidgets('freezing a held view keeps it without reading', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      await deliver(tester, dx: 6);
+      await freeze(tester);
+      expect(controller.state, LiveTranslateState.frozen);
+      expect(session.pauses, 1);
+      expect(engines.reads, 1);
+      expect(spinner(), findsNothing);
+      expect(controller.lines.single.translatedText, '[en] Salida');
+
+      // Frames that still arrive are ignored.
+      engines.lines = [_line('Entrada')];
+      await deliver(tester, seed: 7);
+      expect(controller.lines.single.translatedText, '[en] Salida');
+    });
+
+    testWidgets('freezing while moving reads the last frame', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      for (var i = 0; i < 5; i++) {
+        await deliver(tester, dx: i * 40.0);
+      }
+      expect(engines.reads, 0);
+      engines.texts.single.gate = Completer<void>();
+      await freeze(tester);
+      expect(engines.reads, 1);
+      expect(spinner(), findsOneWidget);
+      expect(controller.lines, isEmpty);
+
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(spinner(), findsNothing);
+      expect(controller.lines.single.translatedText, '[en] Salida');
+      expect(controller.lines.single.opacity, 1);
+    });
+
+    testWidgets('freezing after a pan reads the last frame', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      // 154 raw pixels right is 12% of the upright height.
+      for (var dx = 22.0; dx <= 154; dx += 22) {
+        await deliver(tester, dx: dx);
+      }
+      await freeze(tester);
+      expect(engines.reads, 2);
+      expect(controller.lines.single.rect, _mappedBox);
+    });
+
+    testWidgets('freezing while labels fade shows only the frozen frame', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      engines.lines = [_line('Entrada', _below)];
+      await deliver(tester, seed: 7);
+      await tester.pump(const Duration(milliseconds: 100));
+      await freeze(tester);
+      expect(controller.lines.single.translatedText, '[en] Entrada');
+      expect(controller.lines.single.opacity, 1);
+    });
+
+    testWidgets('freezing before any frame shows nothing', (tester) async {
+      await pumpControlled(tester);
+      await freeze(tester);
+      expect(controller.state, LiveTranslateState.frozen);
+      expect(controller.lines, isEmpty);
+      expect(spinner(), findsNothing);
+      expect(errors, isEmpty);
+    });
+
+    testWidgets('a live read in flight when freezing is not shown', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      engines.texts.single.gate = Completer<void>();
+      await settle(tester);
+      expect(engines.reads, 1);
+      await freeze(tester);
+      // The frozen frame is read; the live read's result is dropped.
+      expect(engines.reads, 2);
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(controller.lines, hasLength(1));
+    });
+
+    testWidgets('a new target while frozen reads the frozen frame again', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      await freeze(tester);
+      await controller.setTargetLanguage(TranslateLanguage.german);
+      await tester.pump();
+      await tester.pump();
+      expect(controller.lines.single.translatedText, '[de] Salida');
+      expect(session.starts, 1);
+    });
+
+    testWidgets('resume returns to live translation', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      await freeze(tester);
+      await controller.resume();
+      await tester.pump();
+      expect(controller.state, LiveTranslateState.running);
+      expect(session.resumes, 1);
+      expect(controller.lines, isEmpty);
+
+      engines.lines = [_line('Entrada')];
+      await settle(tester);
+      await tester.pump();
+      expect(controller.lines.single.translatedText, '[en] Entrada');
+    });
+
+    testWidgets('resuming mid-read drops that read', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      for (var i = 0; i < 3; i++) {
+        await deliver(tester, dx: i * 40.0);
+      }
+      engines.texts.single.gate = Completer<void>();
+      await freeze(tester);
+      await controller.resume();
+      await tester.pump();
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(controller.lines, isEmpty);
+      expect(spinner(), findsNothing);
+    });
+
+    testWidgets('a failed frozen read is reported and shows nothing', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await deliver(tester);
+      engines.texts.single.error = StateError('recognizer crashed');
+      await freeze(tester);
+      expect(errors.whereType<PipelineFailure>(), hasLength(1));
+      expect(spinner(), findsNothing);
+      expect(controller.lines, isEmpty);
+      expect(controller.state, LiveTranslateState.frozen);
+    });
+
+    testWidgets('freezing twice or resuming while running does nothing', (
+      tester,
+    ) async {
+      await pumpControlled(tester);
+      await controller.resume();
+      await controller.freeze();
+      await controller.freeze();
+      await tester.pump();
+      expect(session.resumes, 0);
+      expect(session.pauses, 1);
+    });
+
+    testWidgets('returning from the background while frozen runs live', (
+      tester,
+    ) async {
+      await pumpControlled(tester);
+      await controller.freeze();
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump();
+      expect(controller.state, LiveTranslateState.running);
+    });
+
+    testWidgets('setTargetLanguage translates into French without a restart', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await controller.setTargetLanguage(TranslateLanguage.french);
+      await tester.pump();
+      await settle(tester);
+      await tester.pump();
+      expect(controller.lines.single.translatedText, '[fr] Salida');
+      expect(session.starts, 1);
+      expect(engines.translators.first.closes, 1);
+    });
+
+    testWidgets('a later widget change wins over the controller', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await controller.setTargetLanguage(TranslateLanguage.french);
+      await tester.pumpWidget(
+        app(target: TranslateLanguage.german, controller: controller),
+      );
+      await settle(tester);
+      await tester.pump();
+      expect(controller.lines.single.translatedText, '[de] Salida');
+    });
+
+    testWidgets('an unchanged widget keeps the controller\'s choice', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await controller.setTargetLanguage(TranslateLanguage.french);
+      await tester.pumpWidget(app(controller: controller));
+      await settle(tester);
+      await tester.pump();
+      expect(controller.lines.single.translatedText, '[fr] Salida');
+    });
+
+    testWidgets('setScripts rebuilds the text engine', (tester) async {
+      await pumpControlled(tester);
+      await controller.setScripts({TextScript.latin});
+      await tester.pump();
+      expect(engines.scripts.last, {TextScript.latin});
+      expect(engines.texts.first.closes, 1);
+    });
+
+    testWidgets('setTorch reaches the camera; restarts turn it off', (
+      tester,
+    ) async {
+      await pumpControlled(tester);
+      await controller.setTorch(true);
+      expect(session.torch, isTrue);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(session.starts, 2);
+      expect(session.torch, isFalse);
+    });
+
+    testWidgets('a camera without a torch keeps running', (tester) async {
+      session.hasTorch = false;
+      await pumpControlled(tester);
+      await controller.setTorch(true);
+      await tester.pump();
+      expect(session.torch, isFalse);
+      expect(controller.state, LiveTranslateState.running);
+    });
+
+    testWidgets('disposing the view detaches the controller', (tester) async {
+      await pumpControlled(tester);
+      await tester.pumpWidget(const SizedBox());
+      expect(controller.state, LiveTranslateState.initializing);
+      await controller.freeze(); // Ignored: no view.
+      expect(session.pauses, 0);
+    });
+
+    group('target language', () {
+      late List<TranslateLanguage?> targets;
+
+      setUp(() {
+        targets = [];
+        controller.addListener(() {
+          if (targets.isEmpty || targets.last != controller.targetLanguage) {
+            targets.add(controller.targetLanguage);
+          }
+        });
+      });
+
+      testWidgets('is the device default on a French phone', (tester) async {
+        tester.platformDispatcher.localeTestValue = const Locale('fr', 'FR');
+        addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+        expect(controller.targetLanguage, isNull);
+        await pumpView(tester, app(deviceTarget: true, controller: controller));
+        expect(controller.targetLanguage, TranslateLanguage.french);
+        expect(targets, [TranslateLanguage.french]);
+      });
+
+      testWidgets('is the explicit target', (tester) async {
+        await pumpControlled(tester, target: TranslateLanguage.german);
+        expect(controller.targetLanguage, TranslateLanguage.german);
+      });
+
+      testWidgets('follows setTargetLanguage', (tester) async {
+        await pumpControlled(tester);
+        await controller.setTargetLanguage(TranslateLanguage.french);
+        await tester.pump();
+        expect(controller.targetLanguage, TranslateLanguage.french);
+        expect(targets, [TranslateLanguage.english, TranslateLanguage.french]);
+      });
+
+      testWidgets('follows the widget', (tester) async {
+        await pumpControlled(tester);
+        await tester.pumpWidget(
+          app(target: TranslateLanguage.german, controller: controller),
+        );
+        await tester.pump();
+        expect(controller.targetLanguage, TranslateLanguage.german);
+        expect(targets, [TranslateLanguage.english, TranslateLanguage.german]);
+      });
+
+      testWidgets('is null once the view is removed', (tester) async {
+        await pumpControlled(tester);
+        await tester.pumpWidget(const SizedBox());
+        expect(controller.targetLanguage, isNull);
+      });
+    });
+  });
+}

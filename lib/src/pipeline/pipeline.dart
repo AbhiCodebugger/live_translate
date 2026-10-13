@@ -1,0 +1,139 @@
+import 'dart:async';
+import 'dart:ui' show Rect;
+
+import 'package:google_mlkit_translation/google_mlkit_translation.dart'
+    show BCP47Code, TranslateLanguage;
+
+import '../camera/camera_frame.dart';
+import '../camera/input_image_converter.dart';
+import '../engines/text_engine.dart';
+import '../errors.dart';
+import '../still/colour_sampler.dart';
+import '../still/paragraph.dart';
+import '../still/read_result.dart';
+import 'line_translator.dart';
+
+/// Reads camera frames: recognizes their text with every script, groups it
+/// into paragraphs, translates each paragraph and samples its colours.
+final class Pipeline {
+  /// Creates a pipeline that recognizes text with `textEngine` and translates
+  /// it into [target]. The target's model is checked, and downloaded if
+  /// missing, straight away.
+  ///
+  /// [createTranslator] builds the line translator; it receives the
+  /// pipeline's error reporter, so translation problems reach [errors], and
+  /// its model-ready reporter, which feeds [modelsReady].
+  Pipeline({
+    required TextEngine textEngine,
+    required LineTranslator Function(
+      void Function(LiveTranslateException error) onError,
+      void Function(TranslateLanguage language) onModelReady,
+    )
+    createTranslator,
+    required this.target,
+    this.sourceLanguages,
+  }) : _engine = textEngine {
+    _translator = createTranslator(_report, _modelReady)..prepare(target);
+  }
+
+  /// The language text is translated into.
+  final TranslateLanguage target;
+
+  /// The expected source languages, or `null` to detect them.
+  final Set<TranslateLanguage>? sourceLanguages;
+
+  final TextEngine _engine;
+  late final LineTranslator _translator;
+  final _errors = StreamController<LiveTranslateException>.broadcast();
+  final _modelsReady = StreamController<TranslateLanguage>.broadcast();
+  bool _disposed = false;
+
+  /// Problems found while translating, such as a model starting to
+  /// download. Failures of a read itself are thrown by [read] instead.
+  Stream<LiveTranslateException> get errors => _errors.stream;
+
+  /// Languages whose model the pipeline finished downloading.
+  Stream<TranslateLanguage> get modelsReady => _modelsReady.stream;
+
+  /// Reads [frame] with every script and translates it paragraph by
+  /// paragraph, sampling each paragraph's page colours.
+  ///
+  /// Failures are thrown rather than reported. Returns `null` for a frame in
+  /// an unsupported format.
+  Future<ReadResult?> read(CameraFrame frame) async {
+    final input = toInputImage(frame.image, frame.rotation);
+    if (input == null) return null;
+    final lines = await _engine.recognize(input);
+
+    final byParagraph = <int, List<RecognizedLine>>{};
+    for (final line in lines) {
+      byParagraph.putIfAbsent(line.paragraph, () => []).add(line);
+    }
+    final paragraphs = [
+      for (final MapEntry(key: id, value: members) in byParagraph.entries)
+        RecognizedLine(
+          text: joinParagraph([for (final line in members) line.text]),
+          box: members.map((l) => l.box).reduce((a, b) => a.expandToInclude(b)),
+          paragraph: id,
+        ),
+    ];
+    final translations = await _translator.translateLines(
+      paragraphs,
+      target: target,
+      sourceLanguages: sourceLanguages,
+    );
+    return ReadResult(
+      untranslatedLanguages: {
+        for (final translation in translations)
+          if (translation.translatedText == null) ...{
+            ?translation.sourceLanguage,
+            for (final model in translation.missingModels) model.bcpCode,
+          },
+      },
+      paragraphs: [
+        for (final translation in translations)
+          if (translation.translatedText case final text?)
+            _stillParagraph(frame, translation, text, [
+              for (final line in byParagraph[translation.line.paragraph]!)
+                line.box,
+            ]),
+      ],
+      imageSize: frame.size,
+      rotation: frame.rotation,
+    );
+  }
+
+  ReadParagraph _stillParagraph(
+    CameraFrame frame,
+    LineTranslation translation,
+    String translatedText,
+    List<Rect> lineBoxes,
+  ) {
+    final colours = sampleColours(frame, translation.line.box);
+    return ReadParagraph(
+      box: translation.line.box,
+      lineBoxes: lineBoxes,
+      sourceText: translation.line.text,
+      sourceLanguage: translation.sourceLanguage,
+      translatedText: translatedText,
+      background: colours?.background,
+      ink: colours?.ink,
+    );
+  }
+
+  void _report(LiveTranslateException error) {
+    if (!_disposed) _errors.add(error);
+  }
+
+  void _modelReady(TranslateLanguage language) {
+    if (!_disposed) _modelsReady.add(language);
+  }
+
+  /// Stops emitting. Reads still running finish, but nothing they report is
+  /// delivered. The engines are not closed, because the pipeline doesn't own
+  /// them.
+  Future<void> dispose() async {
+    _disposed = true;
+    await Future.wait([_errors.close(), _modelsReady.close()]);
+  }
+}
