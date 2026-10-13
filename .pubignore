@@ -38,5 +38,7 @@ migrate_working_dir/
 # Repository-only files, not part of the published package
 /openspec/
 /.claude/
+/RELEASE.md
+/dart_test.yaml
 # README images: linked from GitHub, so the package needn't carry them
 /doc/images/
