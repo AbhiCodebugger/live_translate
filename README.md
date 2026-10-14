@@ -18,6 +18,7 @@ const LiveTranslateView();
 - **Automatic languages.** Each paragraph's language is detected, and the models it needs download on their own. The target defaults to the phone's language.
 - **Freeze.** Pause on the current picture to read the translation at leisure.
 - **Programmatic control.** An optional `LiveTranslateController` reports state and lines, and changes the language, scripts and torch without restarting the camera.
+- **Your own look.** Draw the translations yourself with `overlayBuilder`, and show your own screen while the camera starts with `placeholderBuilder`.
 
 ## Install
 
@@ -161,6 +162,64 @@ class _FreezeScreenState extends State<FreezeScreen> {
 ```
 
 While frozen, `_controller.lines` holds one `TranslatedLine` per translated paragraph, with its source text, translation, source language and position. `_controller.targetLanguage` is the language being translated into, and `setTargetLanguage`, `setScripts` and `setTorch` change the view without restarting the camera.
+
+### Act on a freeze
+
+`onFrozen` is called once the frozen picture's translation is shown, with its lines. Here it opens a sheet of the translations:
+
+```dart
+LiveTranslateView(
+  onFrozen: (lines) => showModalBottomSheet<void>(
+    context: context,
+    builder: (context) => ListView(
+      children: [
+        for (final line in lines)
+          ListTile(
+            title: Text(line.translatedText),
+            subtitle: Text(line.sourceText),
+          ),
+      ],
+    ),
+  ),
+);
+```
+
+It is called again when the frozen picture is read again, for example after a change of target language, so update what it opened rather than opening it twice. To follow every change instead, including labels moving with the camera and fading, use `onLinesChanged`.
+
+### Custom labels
+
+`overlayBuilder` replaces the built-in labels. Its widget is laid over the whole view, and each line's `rect` is a position inside it:
+
+```dart
+LiveTranslateView(
+  overlayBuilder: (context, lines) => Stack(
+    children: [
+      for (final line in lines)
+        Positioned.fromRect(
+          rect: line.rect,
+          child: Opacity(
+            opacity: line.opacity,
+            child: Container(
+              color: Colors.yellow,
+              alignment: Alignment.centerLeft,
+              child: Text(line.translatedText),
+            ),
+          ),
+        ),
+    ],
+  ),
+);
+```
+
+Honour `opacity`: it is how labels fade out. With an overlay, `OverlayStyle` is unused, and the page's colours aren't available.
+
+To replace the progress indicator shown while the camera starts, pass `placeholderBuilder`:
+
+```dart
+LiveTranslateView(
+  placeholderBuilder: (context) => const ColoredBox(color: Colors.black),
+);
+```
 
 ### Managing models from your own UI
 

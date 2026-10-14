@@ -1,3 +1,10 @@
+## Unreleased
+
+* `LiveTranslateView.overlayBuilder`: draw the translations yourself. The new `OverlayBuilder` receives the shown lines, in the view's coordinates, and replaces the built-in labels.
+* `LiveTranslateView.onLinesChanged`: called whenever the shown lines change, with or without a controller.
+* `LiveTranslateView.onFrozen`: called with the frozen picture's lines once its translation is shown, and again if it is read again.
+* `LiveTranslateView.placeholderBuilder`: shown while the camera starts, in place of the progress indicator.
+
 ## 0.1.0
 
 First preview release.

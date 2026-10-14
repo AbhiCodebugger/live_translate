@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart' show CameraImage;
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart'
@@ -14,6 +15,7 @@ import 'package:live_translate/src/errors.dart';
 import 'package:live_translate/src/geometry/image_rotation.dart';
 import 'package:live_translate/src/models/overlay_style.dart';
 import 'package:live_translate/src/models/text_script.dart';
+import 'package:live_translate/src/models/translated_line.dart';
 import 'package:live_translate/src/view/live_translate_view.dart';
 import 'package:live_translate/src/view/paragraph_painter.dart';
 
@@ -120,6 +122,10 @@ void main() {
     Set<TranslateLanguage>? sourceLanguages,
     LiveTranslateController? controller,
     OverlayStyle style = const OverlayStyle(),
+    OverlayBuilder? overlayBuilder,
+    ValueChanged<List<TranslatedLine>>? onLinesChanged,
+    ValueChanged<List<TranslatedLine>>? onFrozen,
+    WidgetBuilder? placeholderBuilder,
   }) => MaterialApp(
     home: LiveTranslateView(
       targetLanguage: deviceTarget ? null : target,
@@ -127,6 +133,10 @@ void main() {
       sourceLanguages: sourceLanguages,
       style: style,
       onError: errors.add,
+      overlayBuilder: overlayBuilder,
+      onLinesChanged: onLinesChanged,
+      onFrozen: onFrozen,
+      placeholderBuilder: placeholderBuilder,
       controller: controller,
       createSession: (_) => session,
       createEngines: engines.build,
@@ -1185,6 +1195,379 @@ void main() {
         await tester.pumpWidget(const SizedBox());
         expect(controller.targetLanguage, isNull);
       });
+    });
+  });
+
+  group('callbacks', () {
+    late List<List<TranslatedLine>> changes;
+
+    setUp(() => changes = []);
+
+    group('onLinesChanged', () {
+      testWidgets('reports a translated paragraph without a controller', (
+        tester,
+      ) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, app(onLinesChanged: changes.add));
+        await settle(tester);
+        final line = changes.single.single;
+        expect(line.rect, _mappedBox);
+        expect(line.translatedText, '[en] Salida');
+      });
+
+      testWidgets('reports labels following a shift', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, app(onLinesChanged: changes.add));
+        await settle(tester);
+        await deliver(tester, dx: 16);
+        await tester.pump();
+        // 16 raw pixels right is 10 view pixels down.
+        expect(changes.last.single.rect.top, closeTo(_mappedBox.top + 10, 2));
+      });
+
+      testWidgets('reports a fade, then empty lines', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, app(onLinesChanged: changes.add));
+        await settle(tester);
+        await deliver(tester, seed: 7);
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(changes.last, isEmpty);
+        final opacities = [
+          for (final lines in changes)
+            if (lines.isNotEmpty) lines.single.opacity,
+        ];
+        expect(opacities.first, 1);
+        expect(opacities.where((o) => o > 0 && o < 1), isNotEmpty);
+        for (var i = 1; i < opacities.length; i++) {
+          expect(opacities[i], lessThanOrEqualTo(opacities[i - 1]));
+        }
+      });
+
+      testWidgets('is not called while nothing changes', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, app(onLinesChanged: changes.add));
+        await tester.pump();
+        expect(changes, isEmpty);
+        await settle(tester);
+        final calls = changes.length;
+        for (var i = 0; i < 30; i++) {
+          await deliver(tester);
+        }
+        expect(changes, hasLength(calls));
+      });
+
+      testWidgets("matches the controller's lines", (tester) async {
+        final controller = LiveTranslateController();
+        addTearDown(controller.dispose);
+        final notified = <List<TranslatedLine>>[];
+        controller.addListener(() {
+          if (notified.isEmpty && controller.lines.isEmpty) return;
+          if (notified.isEmpty ||
+              !listEquals(notified.last, controller.lines)) {
+            notified.add(controller.lines);
+          }
+        });
+        engines.lines = [_line('Salida')];
+        await pumpView(
+          tester,
+          app(
+            controller: controller,
+            onLinesChanged: (lines) {
+              expect(lines, controller.lines);
+              changes.add(lines);
+            },
+          ),
+        );
+        await settle(tester);
+        await deliver(tester, dx: 16);
+        await deliver(tester, seed: 7);
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(changes, hasLength(greaterThan(2)));
+        expect(changes, notified);
+      });
+    });
+
+    group('onFrozen', () {
+      late LiveTranslateController controller;
+      late List<List<TranslatedLine>> frozen;
+
+      setUp(() {
+        controller = LiveTranslateController();
+        frozen = [];
+      });
+
+      tearDown(() => controller.dispose());
+
+      Future<void> pumpFrozenView(WidgetTester tester) =>
+          pumpView(tester, app(controller: controller, onFrozen: frozen.add));
+
+      Future<void> freeze(WidgetTester tester) async {
+        await controller.freeze();
+        await tester.pump();
+        await tester.pump();
+      }
+
+      Future<void> move(WidgetTester tester) async {
+        for (var i = 0; i < 5; i++) {
+          await deliver(tester, dx: i * 40.0);
+        }
+      }
+
+      testWidgets('reports the kept labels at once', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpFrozenView(tester);
+        await settle(tester);
+        await freeze(tester);
+        final line = frozen.single.single;
+        expect(line.translatedText, '[en] Salida');
+        expect(line.opacity, 1);
+      });
+
+      testWidgets('reports a frozen read once it finishes', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpFrozenView(tester);
+        await move(tester);
+        engines.texts.single.gate = Completer<void>();
+        await freeze(tester);
+        expect(frozen, isEmpty);
+
+        engines.texts.single.gate!.complete();
+        await tester.pump();
+        await tester.pump();
+        expect(frozen.single.single.translatedText, '[en] Salida');
+      });
+
+      testWidgets('reports empty lines when nothing is found', (tester) async {
+        await pumpFrozenView(tester);
+        await move(tester);
+        await freeze(tester);
+        await tester.pump();
+        expect(frozen, [isEmpty]);
+      });
+
+      testWidgets('reports empty lines when there is no frame', (tester) async {
+        await pumpFrozenView(tester);
+        await freeze(tester);
+        expect(frozen, [isEmpty]);
+      });
+
+      testWidgets('is not called when the read fails', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpFrozenView(tester);
+        await deliver(tester);
+        engines.texts.single.error = StateError('recognizer crashed');
+        await freeze(tester);
+        await tester.pump();
+        expect(frozen, isEmpty);
+        expect(errors.whereType<PipelineFailure>(), hasLength(1));
+      });
+
+      testWidgets('reports again after a new target', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpFrozenView(tester);
+        await settle(tester);
+        await freeze(tester);
+        expect(frozen, hasLength(1));
+        await controller.setTargetLanguage(TranslateLanguage.french);
+        await tester.pump();
+        await tester.pump();
+        expect(frozen, hasLength(2));
+        expect(frozen.last.single.translatedText, '[fr] Salida');
+      });
+
+      testWidgets('is not called when resumed before the read finishes', (
+        tester,
+      ) async {
+        engines.lines = [_line('Salida')];
+        await pumpFrozenView(tester);
+        await move(tester);
+        engines.texts.single.gate = Completer<void>();
+        await freeze(tester);
+        await controller.resume();
+        await tester.pump();
+        engines.texts.single.gate!.complete();
+        await tester.pump();
+        await tester.pump();
+        expect(frozen, isEmpty);
+      });
+    });
+
+    group('placeholderBuilder', () {
+      Widget placeholderApp() =>
+          app(placeholderBuilder: (context) => const Text('Starting…'));
+
+      testWidgets('is shown while the camera starts', (tester) async {
+        session.startGate = Completer<void>();
+        await pumpView(tester, placeholderApp());
+        expect(find.text('Starting…'), findsOneWidget);
+        expect(spinner(), findsNothing);
+        expect(
+          tester.getRect(
+            find.ancestor(
+              of: find.text('Starting…'),
+              matching: find.byType(SizedBox),
+            ),
+          ),
+          const Rect.fromLTRB(0, 0, 360, 800),
+        );
+      });
+
+      testWidgets('is replaced by the preview once started', (tester) async {
+        session.startGate = Completer<void>();
+        await pumpView(tester, placeholderApp());
+        session.startGate!.complete();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byKey(FakeCameraSession.previewKey), findsOneWidget);
+        expect(find.text('Starting…'), findsNothing);
+      });
+
+      testWidgets('is shown while the camera restarts', (tester) async {
+        await pumpView(tester, placeholderApp());
+        expect(find.text('Starting…'), findsNothing);
+        session.startGate = Completer<void>();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        expect(find.text('Starting…'), findsOneWidget);
+
+        session.startGate!.complete();
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('Starting…'), findsNothing);
+        expect(find.byKey(FakeCameraSession.previewKey), findsOneWidget);
+      });
+
+      testWidgets('gives way to a camera error', (tester) async {
+        session.startError = const CameraPermissionDenied();
+        await pumpView(tester, placeholderApp());
+        expect(find.textContaining('CameraPermissionDenied'), findsOneWidget);
+        expect(find.text('Starting…'), findsNothing);
+      });
+
+      // Without a placeholderBuilder, see the camera group's "shows a
+      // placeholder while the camera starts".
+    });
+
+    group('overlayBuilder', () {
+      const overlayKey = Key('overlay');
+      late List<List<TranslatedLine>> built;
+
+      setUp(() => built = []);
+
+      Widget overlayApp({LiveTranslateController? controller}) => app(
+        controller: controller,
+        overlayBuilder: (context, lines) {
+          built.add(lines);
+          return const SizedBox(key: overlayKey);
+        },
+      );
+
+      Finder painter() => find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is ParagraphPainter,
+      );
+
+      testWidgets('replaces the built-in labels', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, overlayApp());
+        await settle(tester);
+        expect(painter(), findsNothing);
+        final line = built.last.single;
+        expect(line.rect, _mappedBox);
+        expect(line.translatedText, '[en] Salida');
+      });
+
+      testWidgets('fills the view, above the preview', (tester) async {
+        await pumpView(tester, overlayApp());
+        expect(
+          tester.getRect(find.byKey(overlayKey)),
+          const Rect.fromLTRB(0, 0, 360, 800),
+        );
+        final stack = tester.widget<Stack>(
+          find.ancestor(
+            of: find.byKey(overlayKey),
+            matching: find.byType(Stack),
+          ),
+        );
+        final keys = [
+          for (final child in stack.children)
+            if (child is Positioned) child.child.key,
+        ];
+        expect(keys, [FakeCameraSession.previewKey, overlayKey]);
+      });
+
+      testWidgets('is rebuilt as labels follow a shift', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, overlayApp());
+        await settle(tester);
+        await deliver(tester, dx: 16);
+        expect(built.last.single.rect.top, closeTo(_mappedBox.top + 10, 2));
+      });
+
+      testWidgets('receives fading lines, then none', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, overlayApp());
+        await settle(tester);
+        await deliver(tester, seed: 7);
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(
+          built.where((l) => l.isNotEmpty && l.single.opacity < 1),
+          isNotEmpty,
+        );
+        expect(built.last, isEmpty);
+      });
+
+      testWidgets('does not receive a line translated to itself', (
+        tester,
+      ) async {
+        engines.guesses['एला'] = const [LanguageGuess('hi', 0.9)];
+        engines.lines = [_line(' एला '), _line('Salida', _below)];
+        await pumpView(tester, overlayApp());
+        engines.translators.single.unchanged.add('एला');
+        await settle(tester);
+        expect(built.last.map((l) => l.translatedText), ['[en] Salida']);
+      });
+
+      testWidgets('sits under the frozen-read indicator', (tester) async {
+        final controller = LiveTranslateController();
+        addTearDown(controller.dispose);
+        engines.lines = [_line('Salida')];
+        await pumpView(tester, overlayApp(controller: controller));
+        for (var i = 0; i < 5; i++) {
+          await deliver(tester, dx: i * 40.0);
+        }
+        engines.texts.single.gate = Completer<void>();
+        await controller.freeze();
+        await tester.pump();
+        expect(built.last, isEmpty);
+        expect(spinner(), findsOneWidget);
+        final stack = tester.widget<Stack>(
+          find.ancestor(of: spinner(), matching: find.byType(Stack)).first,
+        );
+        expect(stack.children.last, isA<Center>());
+        expect(
+          stack.children[stack.children.length - 2],
+          isA<Positioned>().having((p) => p.child.key, 'key', overlayKey),
+        );
+        engines.texts.single.gate!.complete();
+        await tester.pump();
+        await tester.pump();
+        expect(built.last.single.translatedText, '[en] Salida');
+      });
+
+      // Without an overlayBuilder, the translation group's tests cover the
+      // built-in labels.
     });
   });
 }

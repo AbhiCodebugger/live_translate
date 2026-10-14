@@ -16,4 +16,5 @@ export 'src/models/overlay_style.dart';
 export 'src/models/text_script.dart';
 export 'src/models/translated_line.dart';
 export 'src/translation_models.dart';
-export 'src/view/live_translate_view.dart' show LiveTranslateView;
+export 'src/view/live_translate_view.dart'
+    show LiveTranslateView, OverlayBuilder;

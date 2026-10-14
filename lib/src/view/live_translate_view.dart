@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart' show ResolutionPreset;
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart'
     show BCP47Code, TranslateLanguage;
@@ -57,6 +57,15 @@ LiveTranslateEngines mlKitEngines() => (
   models: MlKitModelStore(),
 );
 
+/// Builds an app's own overlay from the lines a [LiveTranslateView] shows.
+///
+/// The widget it returns is laid over the whole view, so each line's
+/// [TranslatedLine.rect] is a position inside it, for example with
+/// [Positioned.fromRect]. Lines fade out by lowering their
+/// [TranslatedLine.opacity], which the overlay should honour.
+typedef OverlayBuilder =
+    Widget Function(BuildContext context, List<TranslatedLine> lines);
+
 /// Shows the live camera and, once the picture settles, each paragraph of
 /// text translated in place, held still while the camera moves a little.
 ///
@@ -84,6 +93,10 @@ class LiveTranslateView extends StatefulWidget {
     this.resolution = ResolutionPreset.medium,
     this.style = const OverlayStyle(),
     this.onError,
+    this.overlayBuilder,
+    this.onLinesChanged,
+    this.onFrozen,
+    this.placeholderBuilder,
     this.controller,
     @internal this.createSession,
     @internal this.createEngines,
@@ -106,12 +119,61 @@ class LiveTranslateView extends StatefulWidget {
   /// The capture resolution.
   final ResolutionPreset resolution;
 
-  /// How translated labels look.
+  /// How translated labels look. Unused when [overlayBuilder] is given.
   final OverlayStyle style;
 
   /// Called with every problem: camera errors, missing models, unsupported
   /// languages and processing failures.
   final ValueChanged<LiveTranslateException>? onError;
+
+  /// Draws the translations in place of the built-in labels, or `null` for
+  /// the built-in labels.
+  ///
+  /// It is laid over the whole view, above the preview, and rebuilt with the
+  /// shown lines whenever they change. [style] is not used when it is given.
+  ///
+  /// ```dart
+  /// LiveTranslateView(
+  ///   overlayBuilder: (context, lines) => Stack(
+  ///     children: [
+  ///       for (final line in lines)
+  ///         Positioned.fromRect(
+  ///           rect: line.rect,
+  ///           child: Opacity(
+  ///             opacity: line.opacity,
+  ///             child: ColoredBox(
+  ///               color: Colors.yellow,
+  ///               child: Text(line.translatedText),
+  ///             ),
+  ///           ),
+  ///         ),
+  ///     ],
+  ///   ),
+  /// );
+  /// ```
+  final OverlayBuilder? overlayBuilder;
+
+  /// Called after a frame with the shown lines whenever they change: a new
+  /// result, labels following the camera, each step of a fade, and clearing.
+  ///
+  /// These are the lines a [LiveTranslateController] reports, and this works
+  /// without one. While labels move or fade it is called on every frame;
+  /// compare [TranslatedLine.translatedText] to react only to new text.
+  final ValueChanged<List<TranslatedLine>>? onLinesChanged;
+
+  /// Called once the frozen picture's translation is shown, with its lines.
+  ///
+  /// That is right away when freezing keeps the labels already shown, and
+  /// after the frozen picture has been read otherwise. It is called again
+  /// each time the frozen picture is read again, after a settings change or
+  /// a model download, so update what it opened rather than opening it
+  /// twice. It isn't called when reading fails; [onError] is.
+  final ValueChanged<List<TranslatedLine>>? onFrozen;
+
+  /// Builds what is shown while the camera starts, and while it restarts
+  /// after the app returns from the background. Defaults to a progress
+  /// indicator. Camera errors are shown instead of it.
+  final WidgetBuilder? placeholderBuilder;
 
   /// Drives and observes this view: its state, lines, freezing, settings
   /// and torch. Settings changed through it and settings passed here
@@ -187,9 +249,14 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   final _readyDuringRead = <String>{};
   int _readToken = 0;
 
-  // What the controller is told after the next frame.
+  // What the controller and callbacks are told after the next frame.
   List<TranslatedLine> _shownLines = const [];
-  bool _publishScheduled = false;
+  List<TranslatedLine> _reportedLines = const [];
+  bool _reportScheduled = false;
+
+  // Whether the frozen picture's result is shown but onFrozen hasn't been
+  // called with it yet.
+  bool _frozenPending = false;
 
   LiveTranslateState get _state {
     if (_error != null) return LiveTranslateState.error;
@@ -235,7 +302,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       if (widget.controller case final controller?) {
         attachController(controller, this);
       }
-      _schedulePublish();
+      _scheduleReport();
     }
 
     var rebuild = false;
@@ -330,6 +397,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   Future<void> _read(CameraFrame frame, {Offset? frozenShift}) async {
     final token = ++_readToken;
     _readyDuringRead.clear();
+    _frozenPending = false;
     setState(() => _reading = true);
     final ReadResult? result;
     try {
@@ -350,6 +418,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     if (!_frozen) _settler.readFinished(success: result != null);
     setState(() {
       _reading = false;
+      if (_frozen) _frozenPending = true;
       if (result == null) return;
       _shown = (result: result, frame: frame);
       _shift = frozenShift ?? _settler.offset;
@@ -396,7 +465,10 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     if (_state != LiveTranslateState.running) return;
     if (_shown != null && _settler.canKeepOnFreeze) {
       // The labels already match the picture: keep them as they are.
-      setState(() => _frozen = true);
+      setState(() {
+        _frozen = true;
+        _frozenPending = true;
+      });
     } else {
       final frame = _lastFrame;
       _readToken++;
@@ -405,6 +477,8 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
         _frozen = true;
         _shown = null;
         _reading = false;
+        // With no frame to read, there is nothing to wait for.
+        _frozenPending = frame == null;
       });
       if (frame != null) unawaited(_read(frame, frozenShift: Offset.zero));
     }
@@ -433,6 +507,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     if (mounted) {
       setState(() {
         _frozen = false;
+        _frozenPending = false;
         _shown = null;
         _reading = false;
         // The camera's state is unknown: show the error, as after a failed
@@ -532,6 +607,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _shown = null;
     _reading = false;
     _frozen = false;
+    _frozenPending = false;
   }
 
   Future<void> _start() async {
@@ -570,21 +646,35 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
 
   void _report(LiveTranslateException error) => widget.onError?.call(error);
 
-  /// Tells the controller what is shown, after this frame: listeners may
-  /// call setState, which isn't allowed during build.
-  void _schedulePublish() {
-    if (_publishScheduled || widget.controller == null) return;
-    _publishScheduled = true;
+  /// Tells the controller and the callbacks what is shown, after this
+  /// frame: they may call setState, which isn't allowed during build.
+  void _scheduleReport() {
+    if (_reportScheduled ||
+        (widget.controller == null &&
+            widget.onLinesChanged == null &&
+            widget.onFrozen == null)) {
+      return;
+    }
+    _reportScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _publishScheduled = false;
+      _reportScheduled = false;
       if (!mounted) return;
+      final lines = _shownLines;
       if (widget.controller case final controller?) {
         publishToController(
           controller,
           state: _state,
-          lines: _shownLines,
+          lines: lines,
           target: _target,
         );
+      }
+      if (!listEquals(lines, _reportedLines)) {
+        _reportedLines = lines;
+        widget.onLinesChanged?.call(lines);
+      }
+      if (_frozenPending && _frozen && !_reading) {
+        _frozenPending = false;
+        widget.onFrozen?.call(lines);
       }
     });
   }
@@ -592,7 +682,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   @override
   Widget build(BuildContext context) {
     if (_error != null || !_running) _shownLines = const [];
-    _schedulePublish();
+    _scheduleReport();
     if (_error case final error?) {
       return Center(
         child: Padding(
@@ -602,6 +692,9 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       );
     }
     if (!_running) {
+      if (widget.placeholderBuilder case final placeholder?) {
+        return SizedBox.expand(child: placeholder(context));
+      }
       return const Center(child: CircularProgressIndicator());
     }
     return LayoutBuilder(
@@ -625,7 +718,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
                 normalizeLineText(paragraph.sourceText))
               paragraph,
         ];
-        _shownLines = [
+        _shownLines = List.unmodifiable([
           for (final (i, paragraph) in paragraphs.indexed)
             TranslatedLine(
               id: 'p$i',
@@ -635,8 +728,9 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
               rect: place(paragraph.box),
               opacity: opacity,
             ),
-        ];
-        _schedulePublish();
+        ]);
+        _scheduleReport();
+        final overlay = widget.overlayBuilder;
         return ClipRect(
           child: Stack(
             fit: StackFit.expand,
@@ -645,28 +739,31 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
                 rect: mapper.layout.previewRect,
                 child: _session.buildPreview(),
               ),
-              CustomPaint(
-                painter: ParagraphPainter(
-                  labels: [
-                    for (final paragraph in paragraphs)
-                      ParagraphLabel(
-                        rect: place(paragraph.box),
-                        lineHeight: _median([
-                          for (final box in paragraph.lineBoxes)
-                            mapper.mapToView(box).height,
-                        ]),
-                        text: paragraph.translatedText,
-                        background:
-                            paragraph.background ??
-                            widget.style.backgroundColor,
-                        ink: paragraph.ink ?? widget.style.textColor,
-                        opacity: opacity,
-                      ),
-                  ],
-                  style: widget.style,
-                  textDirection: textDirectionFor(_target),
+              if (overlay != null)
+                Positioned.fill(child: overlay(context, _shownLines))
+              else
+                CustomPaint(
+                  painter: ParagraphPainter(
+                    labels: [
+                      for (final paragraph in paragraphs)
+                        ParagraphLabel(
+                          rect: place(paragraph.box),
+                          lineHeight: _median([
+                            for (final box in paragraph.lineBoxes)
+                              mapper.mapToView(box).height,
+                          ]),
+                          text: paragraph.translatedText,
+                          background:
+                              paragraph.background ??
+                              widget.style.backgroundColor,
+                          ink: paragraph.ink ?? widget.style.textColor,
+                          opacity: opacity,
+                        ),
+                    ],
+                    style: widget.style,
+                    textDirection: textDirectionFor(_target),
+                  ),
                 ),
-              ),
               if (_frozen && _reading)
                 const Center(child: CircularProgressIndicator()),
             ],

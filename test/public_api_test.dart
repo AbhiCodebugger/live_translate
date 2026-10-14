@@ -1,5 +1,4 @@
-import 'dart:ui' show Rect;
-
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 // The only package import: everything below must resolve through it.
 import 'package:live_translate/live_translate.dart';
@@ -43,6 +42,23 @@ void main() {
     expect(controller.state, LiveTranslateState.initializing);
     expect(controller.targetLanguage, isNull);
     expect(LiveTranslateState.values, hasLength(4));
+  });
+
+  test('the entry library exposes the view hooks', () {
+    Widget overlay(BuildContext context, List<TranslatedLine> lines) =>
+        const SizedBox();
+    final OverlayBuilder builder = overlay;
+    void report(List<TranslatedLine> lines) {}
+    final view = LiveTranslateView(
+      overlayBuilder: builder,
+      onLinesChanged: report,
+      onFrozen: report,
+      placeholderBuilder: (context) => const SizedBox(),
+    );
+    expect(view.overlayBuilder, same(builder));
+    expect(view.onLinesChanged, isNotNull);
+    expect(view.onFrozen, isNotNull);
+    expect(view.placeholderBuilder, isNotNull);
   });
 
   test('the entry library re-exports the dependency types it uses', () {
