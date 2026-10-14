@@ -7,6 +7,7 @@ import 'package:live_translate/src/controller/live_translate_controller.dart';
 import 'package:live_translate/src/controller/live_translate_state.dart';
 import 'package:live_translate/src/models/text_script.dart';
 import 'package:live_translate/src/models/translated_line.dart';
+import 'package:live_translate/src/pipeline/pipeline_metrics.dart';
 
 final class _Host implements ControllerHost {
   final calls = <String>[];
@@ -163,5 +164,47 @@ void main() {
     detachController(controller, _Host());
     await controller.freeze();
     expect(host.calls, ['freeze']);
+  });
+
+  group('metrics', () {
+    const metrics = PipelineMetrics(
+      recognition: Duration(milliseconds: 120),
+      translation: Duration(milliseconds: 80),
+      sampling: Duration(milliseconds: 10),
+      total: Duration(milliseconds: 214),
+      paragraphs: 1,
+      frozen: false,
+    );
+
+    test('every listener receives the same metrics', () async {
+      attachController(controller, host);
+      final first = <PipelineMetrics>[];
+      final second = <PipelineMetrics>[];
+      controller.metrics.listen(first.add);
+      controller.metrics.listen(second.add);
+      publishMetrics(controller, metrics);
+      await pumpEventQueue();
+      expect(first, [metrics]);
+      expect(second, [metrics]);
+    });
+
+    test('an unattached controller emits nothing', () async {
+      final received = <PipelineMetrics>[];
+      controller.metrics.listen(received.add);
+      publishMetrics(controller, metrics);
+      await pumpEventQueue();
+      expect(received, isEmpty);
+    });
+
+    test('disposing closes the stream', () async {
+      final own = LiveTranslateController();
+      var done = false;
+      own.metrics.listen(null, onDone: () => done = true);
+      attachController(own, host);
+      own.dispose();
+      publishMetrics(own, metrics); // Ignored once closed.
+      await pumpEventQueue();
+      expect(done, isTrue);
+    });
   });
 }

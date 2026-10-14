@@ -15,6 +15,7 @@ export 'src/errors.dart';
 export 'src/models/overlay_style.dart';
 export 'src/models/text_script.dart';
 export 'src/models/translated_line.dart';
+export 'src/pipeline/pipeline_metrics.dart' show PipelineMetrics;
 export 'src/translation_models.dart';
 export 'src/view/live_translate_view.dart'
     show LiveTranslateView, OverlayBuilder;

@@ -19,6 +19,7 @@ const LiveTranslateView();
 - **Freeze.** Pause on the current picture to read the translation at leisure.
 - **Programmatic control.** An optional `LiveTranslateController` reports state and lines, and changes the language, scripts and torch without restarting the camera.
 - **Your own look.** Draw the translations yourself with `overlayBuilder`, and show your own screen while the camera starts with `placeholderBuilder`.
+- **Measurable.** `controller.metrics` reports how long each read took, stage by stage, and `showDebugHud` shows the numbers over the camera.
 
 ## Install
 
@@ -161,7 +162,7 @@ class _FreezeScreenState extends State<FreezeScreen> {
 }
 ```
 
-While frozen, `_controller.lines` holds one `TranslatedLine` per translated paragraph, with its source text, translation, source language and position. `_controller.targetLanguage` is the language being translated into, and `setTargetLanguage`, `setScripts` and `setTorch` change the view without restarting the camera.
+While frozen, `_controller.lines` holds one `TranslatedLine` per translated paragraph, with its source text, translation, source language and position. `_controller.targetLanguage` is the language being translated into, and `setTargetLanguage`, `setScripts` and `setTorch` change the view without restarting the camera. `_controller.metrics` reports how long each read took; see [Measuring performance](#measuring-performance).
 
 ### Act on a freeze
 
@@ -237,6 +238,40 @@ Future<void> prepare() async {
   debugPrint('Models on this phone: $onDevice');
 }
 ```
+
+### Measuring performance
+
+Turn on the debug HUD to see the numbers on the phone while you develop:
+
+```dart
+const LiveTranslateView(showDebugHud: true);
+```
+
+It shows the latest read's total time, the time each stage took, how many paragraphs it translated, and how many camera frames per second the view measures.
+
+To log or benchmark them, listen to the controller's `metrics`. It emits one `PipelineMetrics` for each read the view shows, once the result is on screen:
+
+```dart
+final controller = LiveTranslateController();
+
+void logReads() {
+  controller.metrics.listen((metrics) {
+    debugPrint(
+      'read ${metrics.total.inMilliseconds} ms: '
+      'recognition ${metrics.recognition.inMilliseconds}, '
+      'translation ${metrics.translation.inMilliseconds}, '
+      'colours ${metrics.sampling.inMilliseconds} '
+      '(${metrics.paragraphs} paragraphs, frozen: ${metrics.frozen})',
+    );
+  });
+}
+```
+
+- `recognition` covers preparing the frame and reading every selected script.
+- `translation` covers detecting each paragraph's language, checking its models and translating. The first read after a language change includes the model checks, so it is slower.
+- `sampling` covers picking up the page's colours.
+
+Reads that fail or are replaced before they finish emit nothing. The time from holding the camera still to seeing labels is the settle time (about 300 ms) plus `total`. Measure in profile or release mode: debug builds are several times slower.
 
 ### Handling errors
 

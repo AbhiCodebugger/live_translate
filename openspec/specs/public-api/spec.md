@@ -11,7 +11,7 @@ The package SHALL expose its public API through one library, `package:live_trans
 
 #### Scenario: One import is enough
 - **WHEN** a consumer imports only `package:live_translate/live_translate.dart`
-- **THEN** `LiveTranslateView`, `LiveTranslateController`, `LiveTranslateState`, `OverlayBuilder`, `TranslatedLine`, `TextScript`, `OverlayStyle`, `TranslationModels`, `LiveTranslateException` and all its subtypes resolve without further imports
+- **THEN** `LiveTranslateView`, `LiveTranslateController`, `LiveTranslateState`, `OverlayBuilder`, `PipelineMetrics`, `TranslatedLine`, `TextScript`, `OverlayStyle`, `TranslationModels`, `LiveTranslateException` and all its subtypes resolve without further imports
 
 #### Scenario: Internal mapping is not exported
 - **WHEN** a consumer imports the entry library

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection' show Queue;
 
 import 'package:camera/camera.dart' show ResolutionPreset;
 import 'package:flutter/foundation.dart' show listEquals, setEquals;
@@ -30,9 +31,11 @@ import '../models/text_script.dart';
 import '../models/translated_line.dart';
 import '../pipeline/line_translator.dart';
 import '../pipeline/pipeline.dart';
+import '../pipeline/pipeline_metrics.dart';
 import '../still/read_result.dart';
 import '../live/live_settler.dart';
 import '../motion/motion_estimator.dart';
+import 'debug_hud.dart';
 import 'paragraph_painter.dart';
 import 'text_fit.dart';
 
@@ -97,6 +100,7 @@ class LiveTranslateView extends StatefulWidget {
     this.onLinesChanged,
     this.onFrozen,
     this.placeholderBuilder,
+    this.showDebugHud = false,
     this.controller,
     @internal this.createSession,
     @internal this.createEngines,
@@ -175,6 +179,15 @@ class LiveTranslateView extends StatefulWidget {
   /// indicator. Camera errors are shown instead of it.
   final WidgetBuilder? placeholderBuilder;
 
+  /// Whether to show a small panel of performance numbers in the top-left
+  /// corner, for development: the latest read's total time and the time its
+  /// stages took (recognition, translation and colour sampling), how many
+  /// paragraphs it translated, and how many camera frames the view measured
+  /// in the last second. Off by default.
+  ///
+  /// The same numbers reach code through [LiveTranslateController.metrics].
+  final bool showDebugHud;
+
   /// Drives and observes this view: its state, lines, freezing, settings
   /// and torch. Settings changed through it and settings passed here
   /// follow the most recent change.
@@ -209,6 +222,9 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   late final CameraSession _session;
   late final LiveTranslateEngines _engines;
   late final LiveSettler _settler;
+
+  // Times reads: the test clock when given, otherwise a monotonic one.
+  late final DateTime Function() _clock;
   final _estimator = MotionEstimator();
   late final AnimationController _fade;
 
@@ -258,6 +274,18 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   // called with it yet.
   bool _frozenPending = false;
 
+  // The latest shown read's metrics, and whether the controller still has
+  // to hear about them.
+  PipelineMetrics? _latestMetrics;
+  PipelineMetrics? _pendingMetrics;
+
+  // The debug HUD, only while it is shown: what it displays, a timer that
+  // lets the frame rate fall when frames stop, and when the live frames of
+  // the last second arrived.
+  ValueNotifier<DebugHudData>? _hud;
+  Timer? _hudTimer;
+  final _frameTimes = Queue<DateTime>();
+
   LiveTranslateState get _state {
     if (_error != null) return LiveTranslateState.error;
     if (!_running) return LiveTranslateState.initializing;
@@ -276,6 +304,13 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _target = _widgetTarget;
     _scripts = widget.scripts;
     _settler = LiveSettler(now: widget.now);
+    if (widget.now case final now?) {
+      _clock = now;
+    } else {
+      final epoch = DateTime.now();
+      final watch = Stopwatch()..start();
+      _clock = () => epoch.add(watch.elapsed);
+    }
     _fade = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 200),
@@ -286,6 +321,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
         PluginCameraSession(resolution: widget.resolution);
     _engines = widget.createEngines?.call() ?? mlKitEngines();
     _frameSubscription = _session.frames.listen(_onFrame);
+    _syncHud();
     _buildPipeline();
     if (widget.controller case final controller?) {
       attachController(controller, this);
@@ -320,6 +356,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       rebuild = true;
     }
     if (rebuild) _replacePipeline();
+    if (oldWidget.showDebugHud != widget.showDebugHud) _syncHud();
   }
 
   @override
@@ -348,6 +385,8 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     WidgetsBinding.instance.removeObserver(this);
     _readToken++;
     _fade.dispose();
+    _hudTimer?.cancel();
+    _hud?.dispose();
     unawaited(_frameSubscription?.cancel());
     unawaited(_tearDownPipeline());
     unawaited(_session.dispose());
@@ -361,6 +400,10 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       return;
     }
     _lastFrame = frame;
+    if (_hud != null) {
+      _frameTimes.add(_clock());
+      _updateHud();
+    }
     final action = _settler.onFrame(
       _estimator.measure(frame),
       frame.rotation.upright(frame.size),
@@ -420,6 +463,16 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       _reading = false;
       if (_frozen) _frozenPending = true;
       if (result == null) return;
+      final timings = result.timings;
+      _latestMetrics = _pendingMetrics = PipelineMetrics(
+        recognition: timings.recognition,
+        translation: timings.translation,
+        sampling: timings.sampling,
+        total: timings.total,
+        paragraphs: result.paragraphs.length,
+        frozen: _frozen,
+      );
+      _updateHud();
       _shown = (result: result, frame: frame);
       _shift = frozenShift ?? _settler.offset;
       _fade.value = 1;
@@ -456,6 +509,36 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     if (shown.result.untranslatedLanguages.contains(language.bcpCode)) {
       _reread();
     }
+  }
+
+  // Debug HUD.
+
+  /// Creates or drops the HUD to match [LiveTranslateView.showDebugHud].
+  void _syncHud() {
+    if (widget.showDebugHud && _hud == null) {
+      _hud = ValueNotifier((latest: _latestMetrics, framesPerSecond: 0));
+      _hudTimer = Timer.periodic(
+        const Duration(milliseconds: 500),
+        (_) => _updateHud(),
+      );
+    } else if (!widget.showDebugHud && _hud != null) {
+      _hudTimer?.cancel();
+      _hudTimer = null;
+      _hud!.dispose();
+      _hud = null;
+      _frameTimes.clear();
+    }
+  }
+
+  /// Shows the latest read and the live frames of the last second.
+  void _updateHud() {
+    final hud = _hud;
+    if (hud == null) return;
+    final since = _clock().subtract(const Duration(seconds: 1));
+    while (_frameTimes.isNotEmpty && !_frameTimes.first.isAfter(since)) {
+      _frameTimes.removeFirst();
+    }
+    hud.value = (latest: _latestMetrics, framesPerSecond: _frameTimes.length);
   }
 
   // ControllerHost: what the controller asks of the view.
@@ -572,6 +655,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       ),
       target: _target,
       sourceLanguages: widget.sourceLanguages,
+      now: _clock,
     );
     _subscriptions.addAll([
       _pipeline.errors.listen(_report),
@@ -667,7 +751,11 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
           lines: lines,
           target: _target,
         );
+        if (_pendingMetrics case final metrics?) {
+          publishMetrics(controller, metrics);
+        }
       }
+      _pendingMetrics = null;
       if (!listEquals(lines, _reportedLines)) {
         _reportedLines = lines;
         widget.onLinesChanged?.call(lines);
@@ -766,6 +854,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
                 ),
               if (_frozen && _reading)
                 const Center(child: CircularProgressIndicator()),
+              if (_hud case final hud?) DebugHud(data: hud),
             ],
           ),
         );

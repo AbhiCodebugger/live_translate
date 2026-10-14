@@ -4,6 +4,8 @@
 * `LiveTranslateView.onLinesChanged`: called whenever the shown lines change, with or without a controller.
 * `LiveTranslateView.onFrozen`: called with the frozen picture's lines once its translation is shown, and again if it is read again.
 * `LiveTranslateView.placeholderBuilder`: shown while the camera starts, in place of the progress indicator.
+* `PipelineMetrics` and `LiveTranslateController.metrics`: how long each shown read took (recognition, translation, colour sampling and total), how many paragraphs it translated, and whether it was frozen.
+* `LiveTranslateView.showDebugHud`: a small panel over the camera with the latest read's timings and the frame rate, for development.
 
 ## 0.1.0
 

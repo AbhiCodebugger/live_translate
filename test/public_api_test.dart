@@ -61,6 +61,24 @@ void main() {
     expect(view.placeholderBuilder, isNotNull);
   });
 
+  test('the entry library exposes the metrics and the HUD', () async {
+    const metrics = PipelineMetrics(
+      recognition: Duration(milliseconds: 120),
+      translation: Duration(milliseconds: 80),
+      sampling: Duration(milliseconds: 10),
+      total: Duration(milliseconds: 214),
+      paragraphs: 1,
+      frozen: false,
+    );
+    expect(metrics.total.inMilliseconds, 214);
+    final controller = LiveTranslateController();
+    final Stream<PipelineMetrics> stream = controller.metrics;
+    controller.dispose();
+    expect(await stream.isEmpty, isTrue);
+    const view = LiveTranslateView(showDebugHud: true);
+    expect(view.showDebugHud, isTrue);
+  });
+
   test('the entry library re-exports the dependency types it uses', () {
     expect(TranslateLanguage.english.name, 'english');
     expect(ResolutionPreset.medium.name, 'medium');

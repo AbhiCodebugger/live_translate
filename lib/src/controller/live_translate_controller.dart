@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart'
     show TranslateLanguage;
 
 import '../models/text_script.dart';
 import '../models/translated_line.dart';
+import '../pipeline/pipeline_metrics.dart';
 import 'live_translate_state.dart';
 
 /// Drives and observes a live translation view.
@@ -30,6 +33,7 @@ class LiveTranslateController extends ChangeNotifier {
   List<TranslatedLine> _lines = const [];
   TranslateLanguage? _targetLanguage;
   ControllerHost? _host;
+  final _metrics = StreamController<PipelineMetrics>.broadcast();
 
   /// What the view is doing.
   LiveTranslateState get state => _state;
@@ -44,6 +48,22 @@ class LiveTranslateController extends ChangeNotifier {
   /// controller is no longer attached to a view. Listeners are notified when
   /// it changes.
   TranslateLanguage? get targetLanguage => _targetLanguage;
+
+  /// The metrics of each read the view shows, live or frozen, emitted once
+  /// its result is on screen.
+  ///
+  /// Reads that fail or are replaced before they finish emit nothing, and so
+  /// does freezing that keeps the labels already shown. Any number of
+  /// listeners may subscribe; the stream closes when the controller is
+  /// disposed.
+  ///
+  /// ```dart
+  /// controller.metrics.listen((metrics) {
+  ///   debugPrint('${metrics.paragraphs} paragraphs in '
+  ///       '${metrics.total.inMilliseconds} ms');
+  /// });
+  /// ```
+  Stream<PipelineMetrics> get metrics => _metrics.stream;
 
   /// Pauses the preview and translates the frozen picture once, paragraph
   /// by paragraph, in the page's colours. Nothing moves until [resume].
@@ -70,6 +90,12 @@ class LiveTranslateController extends ChangeNotifier {
   /// Turns the torch on or off. Has no effect on a camera without a torch.
   /// The torch turns off whenever the camera restarts.
   Future<void> setTorch(bool on) => _host?.setTorch(on) ?? Future.value();
+
+  @override
+  void dispose() {
+    unawaited(_metrics.close());
+    super.dispose();
+  }
 
   void _publish(
     LiveTranslateState state,
@@ -139,4 +165,14 @@ void publishToController(
     return;
   }
   controller._publish(state, lines, target);
+}
+
+/// Emits [metrics] on [controller]'s [LiveTranslateController.metrics], if
+/// it is attached to a view and not disposed.
+void publishMetrics(
+  LiveTranslateController controller,
+  PipelineMetrics metrics,
+) {
+  if (controller._host == null || controller._metrics.isClosed) return;
+  controller._metrics.add(metrics);
 }

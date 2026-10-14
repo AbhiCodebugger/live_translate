@@ -20,6 +20,8 @@ final class Pipeline {
   /// it into [target]. The target's model is checked, and downloaded if
   /// missing, straight away.
   ///
+  /// Stages are timed with [now], the system clock by default.
+  ///
   /// [createTranslator] builds the line translator; it receives the
   /// pipeline's error reporter, so translation problems reach [errors], and
   /// its model-ready reporter, which feeds [modelsReady].
@@ -32,7 +34,9 @@ final class Pipeline {
     createTranslator,
     required this.target,
     this.sourceLanguages,
-  }) : _engine = textEngine {
+    DateTime Function()? now,
+  }) : _engine = textEngine,
+       _now = now ?? DateTime.now {
     _translator = createTranslator(_report, _modelReady)..prepare(target);
   }
 
@@ -43,6 +47,7 @@ final class Pipeline {
   final Set<TranslateLanguage>? sourceLanguages;
 
   final TextEngine _engine;
+  final DateTime Function() _now;
   late final LineTranslator _translator;
   final _errors = StreamController<LiveTranslateException>.broadcast();
   final _modelsReady = StreamController<TranslateLanguage>.broadcast();
@@ -61,9 +66,11 @@ final class Pipeline {
   /// Failures are thrown rather than reported. Returns `null` for a frame in
   /// an unsupported format.
   Future<ReadResult?> read(CameraFrame frame) async {
+    final start = _now();
     final input = toInputImage(frame.image, frame.rotation);
     if (input == null) return null;
     final lines = await _engine.recognize(input);
+    final recognized = _now();
 
     final byParagraph = <int, List<RecognizedLine>>{};
     for (final line in lines) {
@@ -82,6 +89,16 @@ final class Pipeline {
       target: target,
       sourceLanguages: sourceLanguages,
     );
+    final translated = _now();
+    var sampling = Duration.zero;
+    final shown = [
+      for (final translation in translations)
+        if (translation.translatedText case final text?)
+          _stillParagraph(frame, translation, text, [
+            for (final line in byParagraph[translation.line.paragraph]!)
+              line.box,
+          ], onSampled: (time) => sampling += time),
+    ];
     return ReadResult(
       untranslatedLanguages: {
         for (final translation in translations)
@@ -90,26 +107,34 @@ final class Pipeline {
             for (final model in translation.missingModels) model.bcpCode,
           },
       },
-      paragraphs: [
-        for (final translation in translations)
-          if (translation.translatedText case final text?)
-            _stillParagraph(frame, translation, text, [
-              for (final line in byParagraph[translation.line.paragraph]!)
-                line.box,
-            ]),
-      ],
+      paragraphs: shown,
       imageSize: frame.size,
       rotation: frame.rotation,
+      timings: (
+        recognition: _since(start, recognized),
+        translation: _since(recognized, translated),
+        sampling: sampling,
+        total: _since(start, _now()),
+      ),
     );
+  }
+
+  /// The time from [from] to [to], or zero if the clock went backwards.
+  static Duration _since(DateTime from, DateTime to) {
+    final time = to.difference(from);
+    return time.isNegative ? Duration.zero : time;
   }
 
   ReadParagraph _stillParagraph(
     CameraFrame frame,
     LineTranslation translation,
     String translatedText,
-    List<Rect> lineBoxes,
-  ) {
+    List<Rect> lineBoxes, {
+    required void Function(Duration time) onSampled,
+  }) {
+    final before = _now();
     final colours = sampleColours(frame, translation.line.box);
+    onSampled(_since(before, _now()));
     return ReadParagraph(
       box: translation.line.box,
       lineBoxes: lineBoxes,

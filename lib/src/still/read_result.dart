@@ -70,6 +70,14 @@ final class ReadParagraph {
       '$box)';
 }
 
+/// How long each stage of one read took.
+typedef ReadTimings = ({
+  Duration recognition,
+  Duration translation,
+  Duration sampling,
+  Duration total,
+});
+
 /// The translated paragraphs of one read frame, with what is needed to
 /// place them.
 @immutable
@@ -80,6 +88,12 @@ final class ReadResult {
     required this.imageSize,
     required this.rotation,
     this.untranslatedLanguages = const {},
+    this.timings = (
+      recognition: Duration.zero,
+      translation: Duration.zero,
+      sampling: Duration.zero,
+      total: Duration.zero,
+    ),
   });
 
   /// The translated paragraphs, in reading order. Paragraphs without a
@@ -96,4 +110,7 @@ final class ReadResult {
   /// translated: their source languages, and every model, source or target,
   /// that wasn't ready yet.
   final Set<String> untranslatedLanguages;
+
+  /// How long each stage of the read took.
+  final ReadTimings timings;
 }

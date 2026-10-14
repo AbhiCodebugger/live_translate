@@ -174,4 +174,96 @@ void main() {
       expect(await pipeline.read(frame(planes: 3)), isNull);
     });
   });
+
+  group('timings', () {
+    const first = Rect.fromLTRB(10, 10, 300, 30);
+    const second = Rect.fromLTRB(10, 34, 260, 54);
+    late DateTime clock;
+    late Pipeline timed;
+
+    setUp(() {
+      clock = DateTime(2026);
+      timed = Pipeline(
+        textEngine: text,
+        createTranslator: (onError, onModelReady) => LineTranslator(
+          languageEngine: languages,
+          translateEngine: translator,
+          modelStore: models,
+          onError: onError,
+          onModelReady: onModelReady,
+        ),
+        target: TranslateLanguage.english,
+        now: () => clock,
+      );
+    });
+
+    tearDown(() => timed.dispose());
+
+    test('times recognition and translation', () async {
+      text.lines = [line('Salida')];
+      text.gate = Completer<void>();
+      translator.gate = Completer<void>();
+      final reading = timed.read(frame());
+      await pumpEventQueue();
+      clock = clock.add(const Duration(milliseconds: 120));
+      text.gate!.complete();
+      await pumpEventQueue();
+      clock = clock.add(const Duration(milliseconds: 80));
+      translator.gate!.complete();
+      final timings = (await reading)!.timings;
+
+      expect(timings.recognition, const Duration(milliseconds: 120));
+      expect(timings.translation, const Duration(milliseconds: 80));
+      expect(timings.sampling, Duration.zero);
+      expect(timings.total, const Duration(milliseconds: 200));
+    });
+
+    test('adds up the sampling of every paragraph', () async {
+      // Every reading of the clock moves it on 5 ms.
+      final ticking = Pipeline(
+        textEngine: text,
+        createTranslator: (onError, onModelReady) => LineTranslator(
+          languageEngine: languages,
+          translateEngine: translator,
+          modelStore: models,
+          onError: onError,
+          onModelReady: onModelReady,
+        ),
+        target: TranslateLanguage.english,
+        now: () => clock = clock.add(const Duration(milliseconds: 5)),
+      );
+      addTearDown(ticking.dispose);
+      languages.guesses['Entrada'] = const [LanguageGuess('es', 0.9)];
+      text.lines = const [
+        RecognizedLine(text: 'Salida', box: first),
+        RecognizedLine(text: 'Entrada', box: second, paragraph: 1),
+      ];
+      final result = (await ticking.read(frame()))!;
+      final timings = result.timings;
+
+      expect(result.paragraphs, hasLength(2));
+      // Two paragraphs, each sampled between two readings 5 ms apart.
+      expect(timings.sampling, const Duration(milliseconds: 10));
+      expect(
+        timings.total,
+        greaterThanOrEqualTo(
+          timings.recognition + timings.translation + timings.sampling,
+        ),
+      );
+    });
+
+    test('a read without text spends nothing on translation', () async {
+      text.gate = Completer<void>();
+      final reading = timed.read(frame());
+      await pumpEventQueue();
+      clock = clock.add(const Duration(milliseconds: 40));
+      text.gate!.complete();
+      final timings = (await reading)!.timings;
+
+      expect(timings.recognition, const Duration(milliseconds: 40));
+      expect(timings.translation, Duration.zero);
+      expect(timings.sampling, Duration.zero);
+      expect(timings.total, greaterThanOrEqualTo(timings.recognition));
+    });
+  });
 }

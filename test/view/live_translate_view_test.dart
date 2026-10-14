@@ -16,6 +16,8 @@ import 'package:live_translate/src/geometry/image_rotation.dart';
 import 'package:live_translate/src/models/overlay_style.dart';
 import 'package:live_translate/src/models/text_script.dart';
 import 'package:live_translate/src/models/translated_line.dart';
+import 'package:live_translate/src/pipeline/pipeline_metrics.dart';
+import 'package:live_translate/src/view/debug_hud.dart';
 import 'package:live_translate/src/view/live_translate_view.dart';
 import 'package:live_translate/src/view/paragraph_painter.dart';
 
@@ -66,6 +68,9 @@ final class _Engines {
   };
   List<RecognizedLine> _lines = const [];
 
+  /// When set, every text engine built from now on waits for it.
+  Completer<void>? textGate;
+
   /// Sets the lines every text engine, current and future, recognizes.
   set lines(List<RecognizedLine> lines) {
     _lines = lines;
@@ -80,7 +85,9 @@ final class _Engines {
   LiveTranslateEngines build() => (
     text: (scripts) {
       this.scripts.add(scripts);
-      final text = FakeTextEngine()..lines = _lines;
+      final text = FakeTextEngine()
+        ..lines = _lines
+        ..gate = textGate;
       texts.add(text);
       return text;
     },
@@ -126,6 +133,7 @@ void main() {
     ValueChanged<List<TranslatedLine>>? onLinesChanged,
     ValueChanged<List<TranslatedLine>>? onFrozen,
     WidgetBuilder? placeholderBuilder,
+    bool showDebugHud = false,
   }) => MaterialApp(
     home: LiveTranslateView(
       targetLanguage: deviceTarget ? null : target,
@@ -137,6 +145,7 @@ void main() {
       onLinesChanged: onLinesChanged,
       onFrozen: onFrozen,
       placeholderBuilder: placeholderBuilder,
+      showDebugHud: showDebugHud,
       controller: controller,
       createSession: (_) => session,
       createEngines: engines.build,
@@ -1568,6 +1577,216 @@ void main() {
 
       // Without an overlayBuilder, the translation group's tests cover the
       // built-in labels.
+    });
+  });
+
+  group('metrics', () {
+    late LiveTranslateController controller;
+    late List<PipelineMetrics> metrics;
+
+    setUp(() {
+      controller = LiveTranslateController();
+      metrics = [];
+      controller.metrics.listen(metrics.add);
+    });
+
+    tearDown(() => controller.dispose());
+
+    Future<void> pumpMeasured(WidgetTester tester) =>
+        pumpView(tester, app(controller: controller));
+
+    Future<void> freeze(WidgetTester tester) async {
+      await controller.freeze();
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('a settled read is reported once', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpMeasured(tester);
+      await settle(tester);
+      expect(metrics.single.paragraphs, 1);
+      expect(metrics.single.frozen, isFalse);
+    });
+
+    testWidgets('holding still reports nothing more', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpMeasured(tester);
+      await settle(tester);
+      for (var i = 0; i < 60; i++) {
+        await deliver(tester);
+      }
+      expect(metrics, hasLength(1));
+    });
+
+    testWidgets('a failed read reports nothing', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpMeasured(tester);
+      engines.texts.single.error = StateError('recognizer crashed');
+      await settle(tester);
+      expect(errors.whereType<PipelineFailure>(), isNotEmpty);
+      expect(metrics, isEmpty);
+    });
+
+    testWidgets('a superseded read reports nothing', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpMeasured(tester);
+      await settle(tester);
+      engines.textGate = Completer<void>();
+      await controller.setTargetLanguage(TranslateLanguage.french);
+      await tester.pump();
+      await controller.setTargetLanguage(TranslateLanguage.german);
+      await tester.pump();
+      engines.textGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(controller.lines.single.translatedText, '[de] Salida');
+      expect(metrics, hasLength(2));
+    });
+
+    testWidgets('freezing a held view reports nothing', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpMeasured(tester);
+      await settle(tester);
+      await freeze(tester);
+      expect(metrics, hasLength(1));
+    });
+
+    testWidgets('a live read counts its paragraphs', (tester) async {
+      engines.lines = [_line('Salida'), _line('Entrada', _below)];
+      await pumpMeasured(tester);
+      await settle(tester);
+      expect(metrics.single.paragraphs, 2);
+      expect(metrics.single.frozen, isFalse);
+    });
+
+    testWidgets('a frozen read says so', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpMeasured(tester);
+      for (var i = 0; i < 5; i++) {
+        await deliver(tester, dx: i * 40.0);
+      }
+      await freeze(tester);
+      await tester.pump();
+      expect(metrics.single.frozen, isTrue);
+      expect(metrics.single.paragraphs, 1);
+    });
+  });
+
+  group('debug HUD', () {
+    Finder hud() => find.byType(DebugHud);
+
+    String hudText(WidgetTester tester) => tester
+        .widget<Text>(find.descendant(of: hud(), matching: find.byType(Text)))
+        .data!;
+
+    testWidgets('is off by default', (tester) async {
+      await pumpView(tester);
+      expect(hud(), findsNothing);
+    });
+
+    testWidgets('says when nothing has been read', (tester) async {
+      await pumpView(tester, app(showDebugHud: true));
+      await deliver(tester);
+      expect(hudText(tester), startsWith('no read yet\n'));
+      expect(hudText(tester), endsWith(' fps'));
+    });
+
+    testWidgets("shows the latest read's times, without a controller", (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpView(tester, app(showDebugHud: true));
+      engines.texts.single.gate = Completer<void>();
+      engines.translators.single.gate = Completer<void>();
+      // Hold still until the read starts, then let each stage take time.
+      for (var i = 0; i < 20 && engines.reads == 0; i++) {
+        await deliver(tester);
+      }
+      expect(engines.reads, 1);
+      clock = clock.add(const Duration(milliseconds: 120));
+      engines.texts.single.gate!.complete();
+      await tester.pump();
+      clock = clock.add(const Duration(milliseconds: 80));
+      engines.translators.single.gate!.complete();
+      await tester.pump();
+      await tester.pump();
+
+      final lines = hudText(tester).split('\n');
+      expect(lines[0], 'read 200 ms');
+      expect(lines[1], 'ocr 120 · translate 80 · colours 0');
+      expect(lines[2], startsWith('1 paragraph · '));
+    });
+
+    testWidgets('counts the live frames of the last second', (tester) async {
+      await pumpView(tester, app(showDebugHud: true));
+      for (var i = 0; i < 60; i++) {
+        await deliver(tester);
+      }
+      final fps = int.parse(
+        RegExp(r'(\d+) fps').firstMatch(hudText(tester))!.group(1)!,
+      );
+      expect(fps, inInclusiveRange(29, 31));
+    });
+
+    testWidgets('falls to 0 fps while frozen', (tester) async {
+      final controller = LiveTranslateController();
+      addTearDown(controller.dispose);
+      await pumpView(tester, app(controller: controller, showDebugHud: true));
+      for (var i = 0; i < 30; i++) {
+        await deliver(tester);
+      }
+      await controller.freeze();
+      await tester.pump();
+      clock = clock.add(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(hudText(tester), endsWith('· 0 fps'));
+    });
+
+    testWidgets('is drawn above a custom overlay', (tester) async {
+      const overlayKey = Key('overlay');
+      await pumpView(
+        tester,
+        app(
+          showDebugHud: true,
+          overlayBuilder: (context, lines) => const SizedBox(key: overlayKey),
+        ),
+      );
+      final stack = tester.widget<Stack>(
+        find.ancestor(of: hud(), matching: find.byType(Stack)).first,
+      );
+      expect(stack.children.last, isA<DebugHud>());
+      expect(
+        stack.children.indexWhere(
+          (child) => child is Positioned && child.child.key == overlayKey,
+        ),
+        lessThan(stack.children.length - 1),
+      );
+    });
+
+    testWidgets('is not shown while the camera starts', (tester) async {
+      session.startGate = Completer<void>();
+      await pumpView(tester, app(showDebugHud: true));
+      expect(hud(), findsNothing);
+      expect(spinner(), findsOneWidget);
+      session.startGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(hud(), findsOneWidget);
+    });
+
+    testWidgets('leaves no timer running once removed', (tester) async {
+      await pumpView(tester, app(showDebugHud: true));
+      await tester.pumpWidget(const SizedBox());
+      // The test framework fails the test if the HUD's timer is still
+      // pending once the view is gone.
+    });
+
+    testWidgets('turning it off removes it and its timer', (tester) async {
+      await pumpView(tester, app(showDebugHud: true));
+      expect(hud(), findsOneWidget);
+      await tester.pumpWidget(app());
+      expect(hud(), findsNothing);
     });
   });
 }
