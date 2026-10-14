@@ -26,6 +26,7 @@ void main() {
     expect(find.text('Live Translate'), findsOneWidget);
     expect(find.text('Detect language'), findsOneWidget);
     expect(find.byTooltip('Freeze'), findsOneWidget);
+    expect(find.byTooltip('More'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
   });
 }

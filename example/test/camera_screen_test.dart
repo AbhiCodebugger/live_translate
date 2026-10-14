@@ -2,12 +2,16 @@
 // src/, and fake models through the package's internal test seams.
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_translate/live_translate.dart';
 import 'package:live_translate/src/engines/language_engine.dart';
+import 'package:live_translate/src/view/debug_hud.dart';
 import 'package:live_translate/src/view/paragraph_painter.dart';
 import 'package:live_translate_example/camera_screen.dart';
+import 'package:live_translate_example/models_screen.dart';
 
 import 'support/fakes.dart';
 
@@ -468,6 +472,202 @@ void main() {
         find.text("Can't translate from 'la' on this device."),
         findsOneWidget,
       );
+    });
+  });
+
+  group('text sheet', () {
+    void twoSpanishLines() {
+      store.present.add(TranslateLanguage.spanish);
+      scene
+        ..lines = ['Salida', 'Entrada']
+        ..guesses = {
+          'Salida': const [LanguageGuess('es', 0.9)],
+          'Entrada': const [LanguageGuess('es', 0.9)],
+        };
+    }
+
+    Finder textButton() => find.byTooltip('Show text');
+
+    Future<void> tapShutter(WidgetTester tester, String tooltip) async {
+      await tester.tap(find.byTooltip(tooltip));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('appears once the frozen translation is shown', (tester) async {
+      twoSpanishLines();
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      expect(textButton(), findsNothing);
+      await tapShutter(tester, 'Freeze');
+      expect(textButton(), findsOneWidget);
+    });
+
+    testWidgets('is hidden while the frozen picture is read', (tester) async {
+      twoSpanishLines();
+      await pumpScreen(tester);
+      // One frame isn't enough to settle, so freezing reads it.
+      await deliverFrames(tester, count: 1);
+      scene.gate = Completer<void>();
+      await tapShutter(tester, 'Freeze');
+      expect(textButton(), findsNothing);
+
+      scene.gate!.complete();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(textButton(), findsOneWidget);
+    });
+
+    testWidgets('is hidden when nothing was translated', (tester) async {
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      await tapShutter(tester, 'Freeze');
+      expect(find.byTooltip('Resume'), findsOneWidget);
+      expect(textButton(), findsNothing);
+    });
+
+    testWidgets('is hidden after resuming', (tester) async {
+      twoSpanishLines();
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      await tapShutter(tester, 'Freeze');
+      expect(textButton(), findsOneWidget);
+      await tapShutter(tester, 'Resume');
+      expect(textButton(), findsNothing);
+    });
+
+    testWidgets('keeps the shutter centred', (tester) async {
+      twoSpanishLines();
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      final before = tester.getCenter(find.byTooltip('Freeze')).dx;
+      await tapShutter(tester, 'Freeze');
+      expect(textButton(), findsOneWidget);
+      expect(tester.getCenter(find.byTooltip('Resume')).dx, before);
+    });
+
+    testWidgets('opens the sheet, which follows a new target', (tester) async {
+      twoSpanishLines();
+      store.present.add(TranslateLanguage.german);
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      await tapShutter(tester, 'Freeze');
+      await tester.tap(textButton());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('[english] Salida'), findsWidgets);
+      expect(find.text('Copy all'), findsOneWidget);
+
+      await view(
+        tester,
+      ).controller!.setTargetLanguage(TranslateLanguage.german);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
+      final sheetTiles = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        [
+          for (final tile in tester.widgetList<ListTile>(sheetTiles))
+            (tile.title! as Text).data,
+        ],
+        ['[german] Salida', '[german] Entrada'],
+      );
+    });
+  });
+
+  group('menu', () {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    testWidgets('offers the model manager and the HUD toggle', (tester) async {
+      await pumpScreen(tester);
+      await openMenu(tester);
+      expect(find.text('Languages on this phone'), findsOneWidget);
+      final hud = tester.widget<CheckedPopupMenuItem<Object?>>(
+        find.byWidgetPredicate((w) => w is CheckedPopupMenuItem),
+      );
+      expect((hud.child! as Text).data, 'Debug HUD');
+      expect(hud.checked, isFalse);
+    });
+
+    testWidgets('opens the model manager', (tester) async {
+      await pumpScreen(tester);
+      await openMenu(tester);
+      await tester.tap(find.text('Languages on this phone'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ModelsScreen), findsOneWidget);
+      expect(find.text('On this phone'), findsOneWidget);
+    });
+  });
+
+  group('debug HUD', () {
+    Future<void> toggleHud(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Debug HUD'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    testWidgets('is off at start', (tester) async {
+      await pumpScreen(tester);
+      expect(view(tester).showDebugHud, isFalse);
+      expect(find.byType(DebugHud), findsNothing);
+    });
+
+    testWidgets('turns on, and the menu shows it checked', (tester) async {
+      await pumpScreen(tester);
+      await toggleHud(tester);
+      expect(find.byType(DebugHud), findsOneWidget);
+
+      await tester.tap(find.byTooltip('More'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final item = tester.widget<CheckedPopupMenuItem<Object?>>(
+        find.byWidgetPredicate((w) => w is CheckedPopupMenuItem),
+      );
+      expect(item.checked, isTrue);
+    });
+
+    testWidgets('turns off again', (tester) async {
+      await pumpScreen(tester);
+      await toggleHud(tester);
+      await toggleHud(tester);
+      expect(find.byType(DebugHud), findsNothing);
+    });
+
+    testWidgets('sits below the language pill', (tester) async {
+      tester.view.padding = const FakeViewPadding(top: 24);
+      addTearDown(tester.view.resetPadding);
+      await pumpScreen(tester);
+      await toggleHud(tester);
+      final hudPanel = find.descendant(
+        of: find.byType(DebugHud),
+        matching: find.byType(DecoratedBox),
+      );
+      final pillBottom = tester
+          .getRect(
+            find
+                .ancestor(
+                  of: chip('source-chip'),
+                  matching: find.byType(Container),
+                )
+                .first,
+          )
+          .bottom;
+      expect(tester.getRect(hudPanel).top, greaterThanOrEqualTo(pillBottom));
     });
   });
 }

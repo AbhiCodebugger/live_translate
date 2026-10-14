@@ -5,6 +5,13 @@ import 'package:live_translate/live_translate.dart';
 
 import 'language_picker.dart';
 import 'languages.dart';
+import 'models_screen.dart';
+import 'text_sheet.dart';
+
+/// How far the top controls reach below the safe area: the 56 px top bar,
+/// the 12 px gap and the language pill, with a little room. The view's debug
+/// HUD is placed below them.
+const controlsHeight = 140.0;
 
 /// How often the screen checks whether a reported model has arrived.
 const modelPollInterval = Duration(seconds: 2);
@@ -18,6 +25,8 @@ typedef ViewBuilder =
       required Set<TextScript> scripts,
       required ResolutionPreset resolution,
       required ValueChanged<LiveTranslateException> onError,
+      required ValueChanged<List<TranslatedLine>> onFrozen,
+      required bool showDebugHud,
     });
 
 LiveTranslateView _buildView({
@@ -27,6 +36,8 @@ LiveTranslateView _buildView({
   required Set<TextScript> scripts,
   required ResolutionPreset resolution,
   required ValueChanged<LiveTranslateException> onError,
+  required ValueChanged<List<TranslatedLine>> onFrozen,
+  required bool showDebugHud,
 }) => LiveTranslateView(
   controller: controller,
   targetLanguage: targetLanguage,
@@ -34,6 +45,8 @@ LiveTranslateView _buildView({
   scripts: scripts,
   resolution: resolution,
   onError: onError,
+  onFrozen: onFrozen,
+  showDebugHud: showDebugHud,
 );
 
 /// A full-screen camera translating live, with Lens-style controls: a flash
@@ -75,7 +88,12 @@ class _CameraScreenState extends State<CameraScreen> {
   TranslateLanguage? _detected;
 
   bool _torch = false;
+  bool _showHud = false;
   LiveTranslateState _lastState = LiveTranslateState.initializing;
+
+  // The frozen picture's lines once its translation is shown; `null` while
+  // it is read, and while not frozen.
+  final _frozenLines = ValueNotifier<List<TranslatedLine>?>(null);
 
   // Models the view reported missing that aren't on the device yet.
   final _pending = <TranslateLanguage>{};
@@ -92,6 +110,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void dispose() {
     _poll?.cancel();
+    _frozenLines.dispose();
     _controller
       ..removeListener(_onControllerChanged)
       ..dispose();
@@ -115,6 +134,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _torch) {
       setState(() => _torch = false);
     }
+    if (state != LiveTranslateState.frozen) _frozenLines.value = null;
     _lastState = state;
   }
 
@@ -124,9 +144,27 @@ class _CameraScreenState extends State<CameraScreen> {
     if (mounted) setState(() => _torch = on);
   }
 
-  Future<void> _shutter() => _controller.state == LiveTranslateState.frozen
-      ? _controller.resume()
-      : _controller.freeze();
+  Future<void> _shutter() {
+    if (_controller.state == LiveTranslateState.frozen) {
+      return _controller.resume();
+    }
+    _frozenLines.value = null;
+    return _controller.freeze();
+  }
+
+  void _onFrozen(List<TranslatedLine> lines) {
+    // A late report after resuming isn't shown.
+    if (_controller.state == LiveTranslateState.frozen) {
+      _frozenLines.value = lines;
+    }
+  }
+
+  void _onMenu(_MenuItem item) => switch (item) {
+    _MenuItem.models => Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => ModelsScreen(models: _models)),
+    ),
+    _MenuItem.hud => setState(() => _showHud = !_showHud),
+  };
 
   Future<void> _pickTarget() async {
     final picked = await pickLanguage(
@@ -214,16 +252,28 @@ class _CameraScreenState extends State<CameraScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            // Only tests pass a builder.
-            child: (widget.buildView ?? _buildView)(
-              controller: _controller,
-              // Sharper frames read small print reliably, at the cost of
-              // slower live processing.
-              resolution: ResolutionPreset.high,
-              targetLanguage: _chosenTarget,
-              sourceLanguages: reading.sourceLanguages,
-              scripts: reading.scripts,
-              onError: _onError,
+            // The view's HUD keeps to the safe area: count the top controls
+            // as covered, so it sits below them. The camera still fills the
+            // screen.
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                padding: MediaQuery.paddingOf(context).copyWith(
+                  top: MediaQuery.paddingOf(context).top + controlsHeight,
+                ),
+              ),
+              // Only tests pass a builder.
+              child: (widget.buildView ?? _buildView)(
+                controller: _controller,
+                // Sharper frames read small print reliably, at the cost of
+                // slower live processing.
+                resolution: ResolutionPreset.high,
+                targetLanguage: _chosenTarget,
+                sourceLanguages: reading.sourceLanguages,
+                scripts: reading.scripts,
+                onError: _onError,
+                onFrozen: _onFrozen,
+                showDebugHud: _showHud,
+              ),
             ),
           ),
           const Positioned(
@@ -246,7 +296,12 @@ class _CameraScreenState extends State<CameraScreen> {
           SafeArea(
             child: Column(
               children: [
-                _TopBar(torch: _torch, onTorch: _toggleTorch),
+                _TopBar(
+                  torch: _torch,
+                  onTorch: _toggleTorch,
+                  hud: _showHud,
+                  onMenu: _onMenu,
+                ),
                 const SizedBox(height: 12),
                 _LanguagePill(
                   source: switch ((_source, _detected)) {
@@ -267,10 +322,40 @@ class _CameraScreenState extends State<CameraScreen> {
                   onTarget: _pickTarget,
                 ),
                 const Spacer(),
-                ListenableBuilder(
-                  listenable: _controller,
-                  builder: (context, _) =>
-                      _Shutter(state: _controller.state, onPressed: _shutter),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: ValueListenableBuilder(
+                            valueListenable: _frozenLines,
+                            builder: (context, lines, _) =>
+                                lines == null || lines.isEmpty
+                                ? const SizedBox.shrink()
+                                : Tooltip(
+                                    message: 'Show text',
+                                    child: FilledButton.tonalIcon(
+                                      onPressed: () =>
+                                          showTextSheet(context, _frozenLines),
+                                      icon: const Icon(Icons.notes),
+                                      label: const Text('Text'),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    ListenableBuilder(
+                      listenable: _controller,
+                      builder: (context, _) => _Shutter(
+                        state: _controller.state,
+                        onPressed: _shutter,
+                      ),
+                    ),
+                    const Spacer(),
+                  ],
                 ),
                 const SizedBox(height: 32),
               ],
@@ -282,11 +367,21 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 }
 
+/// The entries of the top bar's menu.
+enum _MenuItem { models, hud }
+
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.torch, required this.onTorch});
+  const _TopBar({
+    required this.torch,
+    required this.onTorch,
+    required this.hud,
+    required this.onMenu,
+  });
 
   final bool torch;
   final VoidCallback onTorch;
+  final bool hud;
+  final ValueChanged<_MenuItem> onMenu;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -303,6 +398,28 @@ class _TopBar extends StatelessWidget {
               tooltip: torch ? 'Torch off' : 'Torch on',
               color: Colors.white,
               icon: Icon(torch ? Icons.flash_on : Icons.flash_off),
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: PopupMenuButton<_MenuItem>(
+              tooltip: 'More',
+              iconColor: Colors.white,
+              onSelected: onMenu,
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: _MenuItem.models,
+                  child: Text('Languages on this phone'),
+                ),
+                CheckedPopupMenuItem(
+                  value: _MenuItem.hud,
+                  checked: hud,
+                  child: const Text('Debug HUD'),
+                ),
+              ],
             ),
           ),
         ),

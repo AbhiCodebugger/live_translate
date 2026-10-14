@@ -35,6 +35,12 @@ final class FakeModelStore implements ModelStore {
   /// Every download request, in order.
   final downloads = <TranslateLanguage>[];
 
+  /// The `wifiOnly` flag of each download in [downloads].
+  final wifiOnly = <bool>[];
+
+  /// When set, [download] throws this after waiting for [downloadGate].
+  Object? downloadError;
+
   /// Downloads wait for this, so they stay running until the test
   /// completes it; then the test marks the model [present] itself.
   final downloadGate = Completer<void>();
@@ -49,7 +55,9 @@ final class FakeModelStore implements ModelStore {
     required bool wifiOnly,
   }) async {
     downloads.add(language);
+    this.wifiOnly.add(wifiOnly);
     await downloadGate.future;
+    if (downloadError case final error?) throw error;
   }
 
   @override
@@ -157,6 +165,9 @@ final class FakeScene {
 
   /// Guesses for each text; a text without an entry is undetermined.
   Map<String, List<LanguageGuess>> guesses = const {};
+
+  /// When set, recognition waits for it.
+  Completer<void>? gate;
 }
 
 /// Fake engines sharing the given model store, showing [scene].
@@ -177,7 +188,12 @@ final class _FakeText implements TextEngine {
 
   /// Each line is its own paragraph.
   @override
-  Future<List<RecognizedLine>> recognize(InputImage image) async => [
+  Future<List<RecognizedLine>> recognize(InputImage image) async {
+    await scene.gate?.future;
+    return _lines();
+  }
+
+  List<RecognizedLine> _lines() => [
     for (final (i, text) in scene.lines.indexed)
       RecognizedLine(
         text: text,
@@ -230,6 +246,8 @@ ViewBuilder fakeView(
       required scripts,
       required resolution,
       required onError,
+      required onFrozen,
+      required showDebugHud,
     }) => LiveTranslateView(
       controller: controller,
       targetLanguage: targetLanguage,
@@ -237,6 +255,8 @@ ViewBuilder fakeView(
       scripts: scripts,
       resolution: resolution,
       onError: onError,
+      onFrozen: onFrozen,
+      showDebugHud: showDebugHud,
       createSession: (_) => session,
       createEngines: engines,
     );

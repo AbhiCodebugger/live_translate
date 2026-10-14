@@ -295,6 +295,27 @@ LiveTranslateView(
 
 `ModelNotDownloaded` is informational: it is reported once when a download starts, and the paragraphs appear once the model arrives.
 
+## Example app
+
+The [example app](example/) is a Google Lens-style camera screen built only on the public API:
+
+- **Language pill.** Pick the language to translate from and to. "Detect language" names the language it found. The source choice also decides which scripts are read: "Detect language" reads Latin and Devanagari, Hindi and Marathi read Devanagari, and every other language reads Latin.
+- **Shutter.** Freeze and resume. Once the frozen picture is translated, a **Text** button opens a sheet with each paragraph's translation and original, to copy one or all of them.
+- **Torch** toggle.
+- **Menu:**
+  - **Languages on this phone** downloads and deletes translation models with `TranslationModels`.
+  - **Debug HUD** turns `showDebugHud` on and off.
+- **Downloads.** A spinner on the language chips shows a model being downloaded.
+
+To run it on a phone connected to your computer:
+
+```sh
+cd example
+flutter run
+```
+
+Use `flutter run --profile` when reading the HUD's timings.
+
 ## Scripts and languages
 
 - **Read:** Latin and Devanagari text, both by default.
