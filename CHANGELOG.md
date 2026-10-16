@@ -1,3 +1,9 @@
+## 0.2.1
+
+Docs only; no code changes.
+
+* Android setup: release builds need three ProGuard rules. Without them, `flutter build apk --release` fails with "Missing classes detected while running R8", because `google_mlkit_text_recognition` refers to the Chinese, Japanese and Korean recognizers that apps don't include. The README shows the `android/app/proguard-rules.pro` to add, and the example app now has it.
+
 ## 0.2.0
 
 **Breaking:** two names from 0.1.0 are renamed before 1.0 to say what they hold. Each item is a paragraph of text, not a single line:

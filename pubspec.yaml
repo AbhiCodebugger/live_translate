@@ -2,7 +2,7 @@ name: live_translate
 description: >-
   A drop-in Flutter widget for live, offline camera translation. Recognises
   text in the camera view, translates it on-device and paints it in place.
-version: 0.2.0
+version: 0.2.1
 repository: https://github.com/AbhiCodebugger/live_translate
 issue_tracker: https://github.com/AbhiCodebugger/live_translate/issues
 topics:
