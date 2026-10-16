@@ -53,6 +53,16 @@ In `android/app/src/main/AndroidManifest.xml`, ask for the camera:
 <uses-permission android:name="android.permission.CAMERA" />
 ```
 
+Release builds shrink the app with R8, which stops at the Chinese, Japanese and Korean recognizers that `google_mlkit_text_recognition` refers to but your app doesn't include. Create `android/app/proguard-rules.pro` with:
+
+```
+-dontwarn com.google.mlkit.vision.text.chinese.**
+-dontwarn com.google.mlkit.vision.text.japanese.**
+-dontwarn com.google.mlkit.vision.text.korean.**
+```
+
+Flutter picks this file up on its own; without it, `flutter build apk --release` fails with "Missing classes detected while running R8".
+
 ### iOS
 
 ML Kit needs iOS 15.5 or later. In `ios/Podfile`, set the platform and add the Devanagari recognizer:

@@ -48,9 +48,9 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: example
-        run: flutter build apk --debug
+        run: flutter build apk --release
 
   ios:
     name: Golden tests and iOS build
