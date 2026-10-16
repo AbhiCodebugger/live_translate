@@ -59,7 +59,7 @@ The language identifier SHALL be created on first use and closed when language d
 - **THEN** its identifier is closed exactly once
 
 ### Requirement: One language per script in each frame
-In each frame, lines containing a Devanagari letter SHALL form one group, and other lines containing a Latin letter another. A line whose own best guess is the target language SHALL keep it and stay out of its group. Each group SHALL get one language: the one with the highest total confidence across its lines, counting only guesses that qualify for a line on their own. Every line in the group with a qualifying guess SHALL be assigned that language.
+In each frame, lines containing a Devanagari letter SHALL form one group, and other lines containing a Latin letter another. A line whose own best guess is the target language SHALL keep it and stay out of its group. Each group SHALL get one language: the one with the highest total confidence across its lines, counting only guesses that qualify for a line on their own and, when any line of the group has a qualifying guess for a language with an on-device translation model, only such languages. Every line in the group with a qualifying guess for that language SHALL be assigned it; a line whose qualifying guesses are all for languages without a model SHALL keep its own best guess.
 
 #### Scenario: Stray Marathi guess among Hindi lines
 - **WHEN** a frame has three Devanagari lines identified as Hindi 0.9, Hindi 0.85 and Marathi 0.9
@@ -76,6 +76,14 @@ In each frame, lines containing a Devanagari letter SHALL form one group, and ot
 #### Scenario: Scripts are decided separately
 - **WHEN** a frame has a Devanagari line identified as Hindi 0.9 and a Latin line identified as Spanish 0.9
 - **THEN** the Devanagari line is assigned "hi" and the Latin line "es"
+
+#### Scenario: Lorem ipsum beside a Spanish heading
+- **WHEN** a frame has one Latin paragraph identified as Spanish 0.9 and four identified as "la" 0.8
+- **THEN** the Spanish paragraph is assigned "es" and the four others keep "la"
+
+#### Scenario: Only untranslatable guesses
+- **WHEN** a frame has three Latin paragraphs, all identified as "la" 0.9
+- **THEN** all three are assigned "la"
 
 ### Requirement: A single hinted language skips identification
 When the app restricts the possible source languages to exactly one language, a line SHALL be assigned that language without running identification, provided the line contains a letter of that language's script, for languages written in Latin or Devanagari. Otherwise the line SHALL have no source language.
