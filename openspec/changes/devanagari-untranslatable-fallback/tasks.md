@@ -12,4 +12,4 @@
 ## 3. Checks
 
 - [x] 3.1 Run `dart format --set-exit-if-changed .`, `flutter analyze` and `flutter test` at the root and in `example/`, `dart pub publish --dry-run`, and `openspec validate devanagari-untranslatable-fallback --strict`. Verify all pass
-- [ ] 3.2 The user reruns the replay test on the Samsung (`flutter test integration_test/replay_test.dart -d <device>` from `example/`). Verify that `hi_caution.jpg` now passes and no other frame regresses
+- [x] 3.2 The user reruns the replay test on the Samsung (`flutter test integration_test/replay_test.dart -d <device>` from `example/`). Verify that `hi_caution.jpg` now passes and no other frame regresses
