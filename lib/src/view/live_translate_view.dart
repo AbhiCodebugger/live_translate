@@ -29,7 +29,7 @@ import '../models/device_language.dart';
 import '../models/overlay_style.dart';
 import '../models/source_status.dart';
 import '../models/text_script.dart';
-import '../models/translated_line.dart';
+import '../models/translated_paragraph.dart';
 import '../pipeline/line_translator.dart';
 import '../pipeline/pipeline.dart';
 import '../pipeline/pipeline_metrics.dart';
@@ -37,6 +37,7 @@ import '../still/read_result.dart';
 import '../live/live_settler.dart';
 import '../motion/motion_estimator.dart';
 import 'debug_hud.dart';
+import 'paragraph_ids.dart';
 import 'paragraph_painter.dart';
 import 'text_fit.dart';
 
@@ -61,14 +62,15 @@ LiveTranslateEngines mlKitEngines() => (
   models: MlKitModelStore(),
 );
 
-/// Builds an app's own overlay from the lines a [LiveTranslateView] shows.
+/// Builds an app's own overlay from the paragraphs a [LiveTranslateView]
+/// shows.
 ///
-/// The widget it returns is laid over the whole view, so each line's
-/// [TranslatedLine.rect] is a position inside it, for example with
-/// [Positioned.fromRect]. Lines fade out by lowering their
-/// [TranslatedLine.opacity], which the overlay should honour.
+/// The widget it returns is laid over the whole view, so each paragraph's
+/// [TranslatedParagraph.rect] is a position inside it, for example with
+/// [Positioned.fromRect]. Paragraphs fade out by lowering their
+/// [TranslatedParagraph.opacity], which the overlay should honour.
 typedef OverlayBuilder =
-    Widget Function(BuildContext context, List<TranslatedLine> lines);
+    Widget Function(BuildContext context, List<TranslatedParagraph> paragraphs);
 
 /// Shows the live camera and, once the picture settles, each paragraph of
 /// text translated in place, held still while the camera moves a little.
@@ -98,7 +100,7 @@ class LiveTranslateView extends StatefulWidget {
     this.style = const OverlayStyle(),
     this.onError,
     this.overlayBuilder,
-    this.onLinesChanged,
+    this.onParagraphsChanged,
     this.onFrozen,
     this.placeholderBuilder,
     this.showDebugHud = false,
@@ -135,20 +137,22 @@ class LiveTranslateView extends StatefulWidget {
   /// the built-in labels.
   ///
   /// It is laid over the whole view, above the preview, and rebuilt with the
-  /// shown lines whenever they change. [style] is not used when it is given.
+  /// shown paragraphs whenever they change. [style] is not used when it is
+  /// given.
   ///
   /// ```dart
   /// LiveTranslateView(
-  ///   overlayBuilder: (context, lines) => Stack(
+  ///   overlayBuilder: (context, paragraphs) => Stack(
   ///     children: [
-  ///       for (final line in lines)
+  ///       for (final paragraph in paragraphs)
   ///         Positioned.fromRect(
-  ///           rect: line.rect,
+  ///           key: ValueKey(paragraph.id),
+  ///           rect: paragraph.rect,
   ///           child: Opacity(
-  ///             opacity: line.opacity,
+  ///             opacity: paragraph.opacity,
   ///             child: ColoredBox(
   ///               color: Colors.yellow,
-  ///               child: Text(line.translatedText),
+  ///               child: Text(paragraph.translatedText),
   ///             ),
   ///           ),
   ///         ),
@@ -158,22 +162,25 @@ class LiveTranslateView extends StatefulWidget {
   /// ```
   final OverlayBuilder? overlayBuilder;
 
-  /// Called after a frame with the shown lines whenever they change: a new
-  /// result, labels following the camera, each step of a fade, and clearing.
+  /// Called after a frame with the shown paragraphs whenever they change: a
+  /// new result, labels following the camera, each step of a fade, and
+  /// clearing.
   ///
-  /// These are the lines a [LiveTranslateController] reports, and this works
-  /// without one. While labels move or fade it is called on every frame;
-  /// compare [TranslatedLine.translatedText] to react only to new text.
-  final ValueChanged<List<TranslatedLine>>? onLinesChanged;
+  /// These are the paragraphs a [LiveTranslateController] reports, and this
+  /// works without one. While labels move or fade it is called on every
+  /// frame; compare [TranslatedParagraph.translatedText] to react only to
+  /// new text.
+  final ValueChanged<List<TranslatedParagraph>>? onParagraphsChanged;
 
-  /// Called once the frozen picture's translation is shown, with its lines.
+  /// Called once the frozen picture's translation is shown, with its
+  /// paragraphs.
   ///
   /// That is right away when freezing keeps the labels already shown, and
   /// after the frozen picture has been read otherwise. It is called again
   /// each time the frozen picture is read again, after a settings change or
   /// a model download, so update what it opened rather than opening it
   /// twice. It isn't called when reading fails; [onError] is.
-  final ValueChanged<List<TranslatedLine>>? onFrozen;
+  final ValueChanged<List<TranslatedParagraph>>? onFrozen;
 
   /// Builds what is shown while the camera starts, and while it restarts
   /// after the app returns from the background. Defaults to a progress
@@ -233,6 +240,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   // widget parameter or the controller.
   late TranslateLanguage _target;
   late Set<TextScript> _scripts;
+  Set<TranslateLanguage>? _sourceLanguages;
 
   // Rebuilt whenever the target, scripts or source languages change.
   late TextEngine _textEngine;
@@ -252,10 +260,19 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   // read.
   CameraFrame? _lastFrame;
 
-  // The result shown, with the frame it was read from, and how far the
-  // picture has moved since that frame.
-  ({ReadResult result, CameraFrame frame})? _shown;
+  // The result shown, with the frame it was read from and each paragraph's
+  // id, and how far the picture has moved since that frame.
+  ({ReadResult result, CameraFrame frame, List<String> ids})? _shown;
   Offset _shift = Offset.zero;
+
+  // Whether the next result keeps the ids of the paragraphs shown in the
+  // same place: not after a clear, a camera start or stop, or a resume.
+  bool _idsCarryOver = false;
+
+  // The paragraphs shown just before a freeze dropped them to read, so the
+  // frozen result keeps their ids.
+  List<PlacedParagraph> _previous = const [];
+  int _nextId = 0;
 
   // Each read gets a token; a read whose token is no longer current
   // (cleared, re-read, resumed or stopped since) is ignored.
@@ -267,8 +284,8 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   int _readToken = 0;
 
   // What the controller and callbacks are told after the next frame.
-  List<TranslatedLine> _shownLines = const [];
-  List<TranslatedLine> _reportedLines = const [];
+  List<TranslatedParagraph> _shownParagraphs = const [];
+  List<TranslatedParagraph> _reportedParagraphs = const [];
   bool _reportScheduled = false;
 
   // Whether the frozen picture's result is shown but onFrozen hasn't been
@@ -309,6 +326,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     super.initState();
     _target = _widgetTarget;
     _scripts = widget.scripts;
+    _sourceLanguages = widget.sourceLanguages;
     _settler = LiveSettler(now: widget.now);
     if (widget.now case final now?) {
       _clock = now;
@@ -358,7 +376,9 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       _scripts = widget.scripts;
       rebuild = true;
     }
-    if (!setEquals(oldWidget.sourceLanguages, widget.sourceLanguages)) {
+    if (!setEquals(oldWidget.sourceLanguages, widget.sourceLanguages) &&
+        !setEquals(widget.sourceLanguages, _sourceLanguages)) {
+      _sourceLanguages = widget.sourceLanguages;
       rebuild = true;
     }
     if (rebuild) _replacePipeline();
@@ -421,6 +441,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       case SettleAction.clear:
         _readToken++;
         _reading = false;
+        _forgetIds();
         _resetSourceStatus();
         if (_shown != null) unawaited(_fade.animateTo(0));
       case SettleAction.none:
@@ -484,8 +505,16 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
         frozen: _frozen,
       );
       _updateHud();
-      _shown = (result: result, frame: frame);
-      _shift = frozenShift ?? _settler.offset;
+      final shift = frozenShift ?? _settler.offset;
+      final ids = matchParagraphIds(
+        [for (final paragraph in result.paragraphs) paragraph.box.shift(shift)],
+        _placedNow(),
+        () => 'p${_nextId++}',
+      );
+      _shown = (result: result, frame: frame, ids: ids);
+      _previous = const [];
+      _idsCarryOver = true;
+      _shift = shift;
       _fade.value = 1;
     });
     if (result != null &&
@@ -493,6 +522,23 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       _readyDuringRead.clear();
       _reread();
     }
+  }
+
+  /// The shown paragraphs where they are now, for the next result to keep
+  /// their ids.
+  List<PlacedParagraph> _placedNow() {
+    final shown = _shown;
+    if (shown == null || !_idsCarryOver) return _previous;
+    return [
+      for (final (i, paragraph) in shown.result.paragraphs.indexed)
+        (id: shown.ids[i], box: paragraph.box.shift(_shift)),
+    ];
+  }
+
+  /// Gives the next result new ids, as after a new scene.
+  void _forgetIds() {
+    _idsCarryOver = false;
+    _previous = const [];
   }
 
   /// Moves the source status on from a read's [status], `null` when the read
@@ -614,6 +660,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       final frame = _lastFrame;
       _readToken++;
       _settler.readCancelled();
+      _previous = _placedNow();
       setState(() {
         _frozen = true;
         _shown = null;
@@ -638,6 +685,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _readToken++;
     _settler.reset();
     _estimator.reset();
+    _forgetIds();
     _resetSourceStatus();
     LiveTranslateException? failure;
     try {
@@ -670,6 +718,15 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   Future<void> setScripts(Set<TextScript> scripts) async {
     if (setEquals(scripts, _scripts)) return;
     setState(() => _scripts = Set.of(scripts));
+    _replacePipeline();
+  }
+
+  @override
+  Future<void> setSourceLanguages(Set<TranslateLanguage>? languages) async {
+    if (setEquals(languages, _sourceLanguages)) return;
+    setState(
+      () => _sourceLanguages = languages == null ? null : Set.of(languages),
+    );
     _replacePipeline();
   }
 
@@ -714,7 +771,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
         onModelReady: onModelReady,
       ),
       target: _target,
-      sourceLanguages: widget.sourceLanguages,
+      sourceLanguages: _sourceLanguages,
       now: _clock,
     );
     _subscriptions.addAll([
@@ -753,6 +810,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _reading = false;
     _frozen = false;
     _frozenPending = false;
+    _forgetIds();
     _resetSourceStatus();
   }
 
@@ -797,7 +855,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   void _scheduleReport() {
     if (_reportScheduled ||
         (widget.controller == null &&
-            widget.onLinesChanged == null &&
+            widget.onParagraphsChanged == null &&
             widget.onFrozen == null)) {
       return;
     }
@@ -805,12 +863,12 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _reportScheduled = false;
       if (!mounted) return;
-      final lines = _shownLines;
+      final paragraphs = _shownParagraphs;
       if (widget.controller case final controller?) {
         publishToController(
           controller,
           state: _state,
-          lines: lines,
+          paragraphs: paragraphs,
           target: _target,
           sourceStatus: _sourceStatus,
         );
@@ -819,20 +877,20 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
         }
       }
       _pendingMetrics = null;
-      if (!listEquals(lines, _reportedLines)) {
-        _reportedLines = lines;
-        widget.onLinesChanged?.call(lines);
+      if (!listEquals(paragraphs, _reportedParagraphs)) {
+        _reportedParagraphs = paragraphs;
+        widget.onParagraphsChanged?.call(paragraphs);
       }
       if (_frozenPending && _frozen && !_reading) {
         _frozenPending = false;
-        widget.onFrozen?.call(lines);
+        widget.onFrozen?.call(paragraphs);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null || !_running) _shownLines = const [];
+    if (_error != null || !_running) _shownParagraphs = const [];
     _scheduleReport();
     if (_error case final error?) {
       return Center(
@@ -863,16 +921,16 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
         final opacity = _fade.value;
         Rect place(Rect box) => mapper.mapToView(box.shift(_shift));
         final paragraphs = [
-          for (final paragraph
-              in shown?.result.paragraphs ?? const <ReadParagraph>[])
-            if (normalizeLineText(paragraph.translatedText) !=
-                normalizeLineText(paragraph.sourceText))
-              paragraph,
+          if (shown != null)
+            for (final (i, paragraph) in shown.result.paragraphs.indexed)
+              if (normalizeLineText(paragraph.translatedText) !=
+                  normalizeLineText(paragraph.sourceText))
+                (id: shown.ids[i], paragraph: paragraph),
         ];
-        _shownLines = List.unmodifiable([
-          for (final (i, paragraph) in paragraphs.indexed)
-            TranslatedLine(
-              id: 'p$i',
+        _shownParagraphs = List.unmodifiable([
+          for (final (:id, :paragraph) in paragraphs)
+            TranslatedParagraph(
+              id: id,
               sourceText: paragraph.sourceText,
               translatedText: paragraph.translatedText,
               sourceLanguage: paragraph.sourceLanguage,
@@ -891,12 +949,12 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
                 child: _session.buildPreview(),
               ),
               if (overlay != null)
-                Positioned.fill(child: overlay(context, _shownLines))
+                Positioned.fill(child: overlay(context, _shownParagraphs))
               else
                 CustomPaint(
                   painter: ParagraphPainter(
                     labels: [
-                      for (final paragraph in paragraphs)
+                      for (final (id: _, :paragraph) in paragraphs)
                         ParagraphLabel(
                           rect: place(paragraph.box),
                           lineHeight: _median([

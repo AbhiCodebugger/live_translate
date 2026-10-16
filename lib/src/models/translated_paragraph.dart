@@ -2,13 +2,17 @@ import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart' show immutable;
 
-/// One line of camera text and its translation, positioned in the view.
+/// One paragraph of camera text and its translation, positioned in the
+/// view.
+///
+/// A paragraph's lines are joined and translated as one text, and [rect]
+/// covers all of them.
 @immutable
-final class TranslatedLine {
-  /// Creates a translated line.
+final class TranslatedParagraph {
+  /// Creates a translated paragraph.
   ///
   /// [opacity] must be between 0.0 and 1.0 inclusive.
-  const TranslatedLine({
+  const TranslatedParagraph({
     required this.id,
     required this.sourceText,
     required this.translatedText,
@@ -20,8 +24,13 @@ final class TranslatedLine {
          'opacity must be between 0.0 and 1.0',
        );
 
-  /// An identifier that stays the same while the line is tracked across
-  /// frames.
+  /// Identifies the paragraph while the view keeps reading it in the same
+  /// place.
+  ///
+  /// A later read of the same scene, such as one after a download, a change
+  /// of target language, a small pan or a freeze, gives the paragraph found
+  /// in the same place the same id, so it can key a widget. A new scene
+  /// gives every paragraph a new id. The format is opaque.
   final String id;
 
   /// The text as recognised in the camera frame.
@@ -34,17 +43,18 @@ final class TranslatedLine {
   /// could not be determined.
   final String? sourceLanguage;
 
-  /// The line's bounds in the view's coordinate space.
+  /// The paragraph's bounds in the view's coordinate space.
   final Rect rect;
 
-  /// How visible the line is, from 0.0 (hidden) to 1.0 (fully visible).
+  /// How visible the paragraph is, from 0.0 (hidden) to 1.0 (fully visible).
   ///
-  /// Drops below 1.0 as the line fades out after leaving the camera frame.
+  /// Drops below 1.0 as the labels fade out after a fast movement or a new
+  /// scene.
   final double opacity;
 
   @override
   bool operator ==(Object other) =>
-      other is TranslatedLine &&
+      other is TranslatedParagraph &&
       other.id == id &&
       other.sourceText == sourceText &&
       other.translatedText == translatedText &&
@@ -64,7 +74,7 @@ final class TranslatedLine {
 
   @override
   String toString() =>
-      'TranslatedLine(id: $id, sourceText: "$sourceText", '
+      'TranslatedParagraph(id: $id, sourceText: "$sourceText", '
       'translatedText: "$translatedText", sourceLanguage: $sourceLanguage, '
       'rect: $rect, opacity: $opacity)';
 }

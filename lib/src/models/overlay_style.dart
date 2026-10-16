@@ -4,8 +4,8 @@ import 'package:flutter/painting.dart';
 /// The look of the translated labels painted over the camera view.
 ///
 /// Labels take their colours from the page behind each paragraph, and their
-/// font size from the original text's line height, shrinking towards
-/// [minFontSize] until the translation fits.
+/// font size from the original text's line height, at most [maxFontSize],
+/// shrinking towards [minFontSize] until the translation fits.
 @immutable
 final class OverlayStyle {
   /// Creates an overlay style. Every field has a default.
@@ -42,8 +42,8 @@ final class OverlayStyle {
   /// The smallest font size a label may shrink to before it is ellipsised.
   final double minFontSize;
 
-  /// Not used by any label: labels start from the original text's size.
-  /// Kept until the API is reviewed for release 0.1.0.
+  /// The largest font size a label starts at. Labels start from the
+  /// original text's size, so a large heading's label stops here.
   final double maxFontSize;
 
   /// The weight of the translated text.

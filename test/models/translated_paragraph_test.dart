@@ -1,22 +1,24 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:live_translate/src/models/translated_line.dart';
+import 'package:live_translate/src/models/translated_paragraph.dart';
 
 void main() {
   const rect = Rect.fromLTWH(10, 20, 100, 30);
 
-  TranslatedLine line({double opacity = 1.0, String? sourceLanguage = 'hi'}) =>
-      TranslatedLine(
-        id: 'line-1',
-        sourceText: 'नमस्ते',
-        translatedText: 'Hello',
-        sourceLanguage: sourceLanguage,
-        rect: rect,
-        opacity: opacity,
-      );
+  TranslatedParagraph line({
+    double opacity = 1.0,
+    String? sourceLanguage = 'hi',
+  }) => TranslatedParagraph(
+    id: 'line-1',
+    sourceText: 'नमस्ते',
+    translatedText: 'Hello',
+    sourceLanguage: sourceLanguage,
+    rect: rect,
+    opacity: opacity,
+  );
 
-  group('TranslatedLine', () {
+  group('TranslatedParagraph', () {
     test('is equal when all fields are equal', () {
       expect(line(), line());
       expect(line().hashCode, line().hashCode);
@@ -27,7 +29,7 @@ void main() {
     });
 
     test('defaults to full opacity and an undetermined language', () {
-      const minimal = TranslatedLine(
+      const minimal = TranslatedParagraph(
         id: 'line-1',
         sourceText: 'Hola',
         translatedText: 'Hello',

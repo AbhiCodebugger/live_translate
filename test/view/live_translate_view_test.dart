@@ -16,7 +16,7 @@ import 'package:live_translate/src/geometry/image_rotation.dart';
 import 'package:live_translate/src/models/overlay_style.dart';
 import 'package:live_translate/src/models/source_status.dart';
 import 'package:live_translate/src/models/text_script.dart';
-import 'package:live_translate/src/models/translated_line.dart';
+import 'package:live_translate/src/models/translated_paragraph.dart';
 import 'package:live_translate/src/pipeline/pipeline_metrics.dart';
 import 'package:live_translate/src/view/debug_hud.dart';
 import 'package:live_translate/src/view/live_translate_view.dart';
@@ -131,8 +131,8 @@ void main() {
     LiveTranslateController? controller,
     OverlayStyle style = const OverlayStyle(),
     OverlayBuilder? overlayBuilder,
-    ValueChanged<List<TranslatedLine>>? onLinesChanged,
-    ValueChanged<List<TranslatedLine>>? onFrozen,
+    ValueChanged<List<TranslatedParagraph>>? onParagraphsChanged,
+    ValueChanged<List<TranslatedParagraph>>? onFrozen,
     WidgetBuilder? placeholderBuilder,
     bool showDebugHud = false,
   }) => MaterialApp(
@@ -143,7 +143,7 @@ void main() {
       style: style,
       onError: errors.add,
       overlayBuilder: overlayBuilder,
-      onLinesChanged: onLinesChanged,
+      onParagraphsChanged: onParagraphsChanged,
       onFrozen: onFrozen,
       placeholderBuilder: placeholderBuilder,
       showDebugHud: showDebugHud,
@@ -756,6 +756,131 @@ void main() {
     });
   });
 
+  group('paragraph ids', () {
+    late LiveTranslateController controller;
+
+    setUp(() => controller = LiveTranslateController());
+    tearDown(() => controller.dispose());
+
+    Future<void> pumpControlled(WidgetTester tester) =>
+        pumpView(tester, app(controller: controller));
+
+    String shownId() => controller.paragraphs.single.id;
+
+    /// Pans 256 raw pixels right, 20% of the upright height, a step at a
+    /// time, then settles there and reads.
+    Future<void> pan(WidgetTester tester) async {
+      for (var dx = 32.0; dx <= 256; dx += 32) {
+        await deliver(tester, dx: dx);
+      }
+      await settle(tester, dx: 256);
+    }
+
+    testWidgets('ids are unique within a result', (tester) async {
+      engines.lines = [_line('Salida'), _line('Entrada', _below)];
+      await pumpControlled(tester);
+      await settle(tester);
+      final ids = controller.paragraphs.map((p) => p.id).toSet();
+      expect(ids, hasLength(2));
+    });
+
+    testWidgets('a re-read while the language settles keeps the id', (
+      tester,
+    ) async {
+      engines.models.present.remove(TranslateLanguage.spanish);
+      engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line('Salida'), _line('नमस्ते', _below)];
+      await pumpControlled(tester);
+      await settle(tester);
+      final id = controller.paragraphs.single.id;
+      for (var i = 0; i < 40; i++) {
+        await deliver(tester);
+      }
+      expect(engines.reads, greaterThan(1));
+      expect(controller.paragraphs.single.id, id);
+    });
+
+    testWidgets('a new target keeps the id', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      final id = shownId();
+      await controller.setTargetLanguage(TranslateLanguage.french);
+      await tester.pump();
+      await tester.pump();
+      expect(controller.paragraphs.single.translatedText, '[fr] Salida');
+      expect(shownId(), id);
+    });
+
+    testWidgets('a pan that keeps most of the paragraph keeps the id', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      final id = shownId();
+      // The held label follows the pan about 256 down; the new read finds
+      // the paragraph a little short of it, still overlapping most of it.
+      engines.lines = [_line('Salida', _box.shift(const Offset(0, 248)))];
+      await pan(tester);
+      expect(engines.reads, 2);
+      expect(shownId(), id);
+    });
+
+    testWidgets('a paragraph in a new place gets a new id', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      final id = shownId();
+      await pan(tester);
+      expect(engines.reads, 2);
+      expect(shownId(), isNot(id));
+    });
+
+    testWidgets('a new scene gets new ids', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      final id = shownId();
+      await deliver(tester, seed: 2);
+      await tester.pump(const Duration(milliseconds: 250));
+      await settle(tester, seed: 2);
+      expect(engines.reads, 2);
+      expect(shownId(), isNot(id));
+    });
+
+    testWidgets('freezing a held view keeps the id', (tester) async {
+      final frozen = <List<TranslatedParagraph>>[];
+      engines.lines = [_line('Salida')];
+      await pumpView(tester, app(controller: controller, onFrozen: frozen.add));
+      await settle(tester);
+      final id = shownId();
+      await controller.freeze();
+      await tester.pump();
+      await tester.pump();
+      expect(frozen.single.single.id, id);
+    });
+
+    testWidgets('freezing that reads keeps the id in the same place', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      final id = shownId();
+      // Drift 64 down: past what freezing keeps, short of reading again.
+      for (var dx = 16.0; dx <= 64; dx += 16) {
+        await deliver(tester, dx: dx);
+      }
+      engines.lines = [_line('Salida', _box.shift(const Offset(0, 64)))];
+      await controller.freeze();
+      await tester.pump();
+      await tester.pump();
+      expect(engines.reads, 2);
+      expect(shownId(), id);
+    });
+  });
+
   group('device language', () {
     Future<void> pumpOnDevice(WidgetTester tester, Locale locale) async {
       tester.platformDispatcher.localeTestValue = locale;
@@ -1045,12 +1170,12 @@ void main() {
     testWidgets('exposes the shown paragraphs', (tester) async {
       await pumpControlled(tester);
       await tester.pump();
-      expect(controller.lines, isEmpty);
+      expect(controller.paragraphs, isEmpty);
 
       engines.lines = [_line('Salida')];
       await settle(tester);
       await tester.pump();
-      final line = controller.lines.single;
+      final line = controller.paragraphs.single;
       expect(line.rect, _mappedBox);
       expect(line.translatedText, '[en] Salida');
     });
@@ -1062,7 +1187,10 @@ void main() {
       await deliver(tester, dx: 16);
       await tester.pump();
       // 16 raw pixels right is 10 view pixels down.
-      expect(controller.lines.single.rect.top, closeTo(_mappedBox.top + 10, 2));
+      expect(
+        controller.paragraphs.single.rect.top,
+        closeTo(_mappedBox.top + 10, 2),
+      );
     });
 
     testWidgets('lines hold a paragraph as one entry', (tester) async {
@@ -1073,7 +1201,7 @@ void main() {
       await pumpControlled(tester);
       await settle(tester);
       await tester.pump();
-      final line = controller.lines.single;
+      final line = controller.paragraphs.single;
       expect(line.sourceText, 'Salida de emergencia');
       expect(line.translatedText, '[en] Salida de emergencia');
       expect(line.rect, const Rect.fromLTRB(17.5, 125, 142.5, 206.25));
@@ -1091,12 +1219,12 @@ void main() {
       expect(session.pauses, 1);
       expect(engines.reads, 1);
       expect(spinner(), findsNothing);
-      expect(controller.lines.single.translatedText, '[en] Salida');
+      expect(controller.paragraphs.single.translatedText, '[en] Salida');
 
       // Frames that still arrive are ignored.
       engines.lines = [_line('Entrada')];
       await deliver(tester, seed: 7);
-      expect(controller.lines.single.translatedText, '[en] Salida');
+      expect(controller.paragraphs.single.translatedText, '[en] Salida');
     });
 
     testWidgets('freezing while moving reads the last frame', (tester) async {
@@ -1110,14 +1238,14 @@ void main() {
       await freeze(tester);
       expect(engines.reads, 1);
       expect(spinner(), findsOneWidget);
-      expect(controller.lines, isEmpty);
+      expect(controller.paragraphs, isEmpty);
 
       engines.texts.single.gate!.complete();
       await tester.pump();
       await tester.pump();
       expect(spinner(), findsNothing);
-      expect(controller.lines.single.translatedText, '[en] Salida');
-      expect(controller.lines.single.opacity, 1);
+      expect(controller.paragraphs.single.translatedText, '[en] Salida');
+      expect(controller.paragraphs.single.opacity, 1);
     });
 
     testWidgets('freezing after a pan reads the last frame', (tester) async {
@@ -1130,7 +1258,7 @@ void main() {
       }
       await freeze(tester);
       expect(engines.reads, 2);
-      expect(controller.lines.single.rect, _mappedBox);
+      expect(controller.paragraphs.single.rect, _mappedBox);
     });
 
     testWidgets('freezing while labels fade shows only the frozen frame', (
@@ -1143,15 +1271,15 @@ void main() {
       await deliver(tester, seed: 7);
       await tester.pump(const Duration(milliseconds: 100));
       await freeze(tester);
-      expect(controller.lines.single.translatedText, '[en] Entrada');
-      expect(controller.lines.single.opacity, 1);
+      expect(controller.paragraphs.single.translatedText, '[en] Entrada');
+      expect(controller.paragraphs.single.opacity, 1);
     });
 
     testWidgets('freezing before any frame shows nothing', (tester) async {
       await pumpControlled(tester);
       await freeze(tester);
       expect(controller.state, LiveTranslateState.frozen);
-      expect(controller.lines, isEmpty);
+      expect(controller.paragraphs, isEmpty);
       expect(spinner(), findsNothing);
       expect(errors, isEmpty);
     });
@@ -1170,7 +1298,7 @@ void main() {
       engines.texts.single.gate!.complete();
       await tester.pump();
       await tester.pump();
-      expect(controller.lines, hasLength(1));
+      expect(controller.paragraphs, hasLength(1));
     });
 
     testWidgets('a new target while frozen reads the frozen frame again', (
@@ -1183,7 +1311,7 @@ void main() {
       await controller.setTargetLanguage(TranslateLanguage.german);
       await tester.pump();
       await tester.pump();
-      expect(controller.lines.single.translatedText, '[de] Salida');
+      expect(controller.paragraphs.single.translatedText, '[de] Salida');
       expect(session.starts, 1);
     });
 
@@ -1196,12 +1324,12 @@ void main() {
       await tester.pump();
       expect(controller.state, LiveTranslateState.running);
       expect(session.resumes, 1);
-      expect(controller.lines, isEmpty);
+      expect(controller.paragraphs, isEmpty);
 
       engines.lines = [_line('Entrada')];
       await settle(tester);
       await tester.pump();
-      expect(controller.lines.single.translatedText, '[en] Entrada');
+      expect(controller.paragraphs.single.translatedText, '[en] Entrada');
     });
 
     testWidgets('resuming mid-read drops that read', (tester) async {
@@ -1217,7 +1345,7 @@ void main() {
       engines.texts.single.gate!.complete();
       await tester.pump();
       await tester.pump();
-      expect(controller.lines, isEmpty);
+      expect(controller.paragraphs, isEmpty);
       expect(spinner(), findsNothing);
     });
 
@@ -1231,7 +1359,7 @@ void main() {
       await freeze(tester);
       expect(errors.whereType<PipelineFailure>(), hasLength(1));
       expect(spinner(), findsNothing);
-      expect(controller.lines, isEmpty);
+      expect(controller.paragraphs, isEmpty);
       expect(controller.state, LiveTranslateState.frozen);
     });
 
@@ -1270,7 +1398,7 @@ void main() {
       await tester.pump();
       await settle(tester);
       await tester.pump();
-      expect(controller.lines.single.translatedText, '[fr] Salida');
+      expect(controller.paragraphs.single.translatedText, '[fr] Salida');
       expect(session.starts, 1);
       expect(engines.translators.first.closes, 1);
     });
@@ -1286,7 +1414,7 @@ void main() {
       );
       await settle(tester);
       await tester.pump();
-      expect(controller.lines.single.translatedText, '[de] Salida');
+      expect(controller.paragraphs.single.translatedText, '[de] Salida');
     });
 
     testWidgets('an unchanged widget keeps the controller\'s choice', (
@@ -1298,7 +1426,7 @@ void main() {
       await tester.pumpWidget(app(controller: controller));
       await settle(tester);
       await tester.pump();
-      expect(controller.lines.single.translatedText, '[fr] Salida');
+      expect(controller.paragraphs.single.translatedText, '[fr] Salida');
     });
 
     testWidgets('setScripts rebuilds the text engine', (tester) async {
@@ -1307,6 +1435,60 @@ void main() {
       await tester.pump();
       expect(engines.scripts.last, {TextScript.latin});
       expect(engines.texts.first.closes, 1);
+    });
+
+    group('setSourceLanguages', () {
+      testWidgets('expecting Hindi replaces the engines and skips detection', (
+        tester,
+      ) async {
+        engines.lines = [_line('नमस्ते')];
+        await pumpControlled(tester);
+        await controller.setSourceLanguages({TranslateLanguage.hindi});
+        await tester.pump();
+        expect(engines.texts, hasLength(2));
+        expect(engines.texts.first.closes, 1);
+        await settle(tester);
+        expect(controller.paragraphs.single.translatedText, '[en] नमस्ते');
+        expect(engines.languages.last.identified, isEmpty);
+        expect(session.starts, 1);
+      });
+
+      testWidgets('null goes back to detection', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpControlled(tester);
+        await controller.setSourceLanguages({TranslateLanguage.spanish});
+        await tester.pump();
+        await controller.setSourceLanguages(null);
+        await tester.pump();
+        await settle(tester);
+        expect(engines.languages.last.identified, ['Salida']);
+      });
+
+      testWidgets('a later widget change wins', (tester) async {
+        engines.lines = [_line('Salida')];
+        await pumpControlled(tester);
+        await controller.setSourceLanguages({TranslateLanguage.hindi});
+        await tester.pump();
+        await tester.pumpWidget(
+          app(
+            controller: controller,
+            sourceLanguages: const {TranslateLanguage.spanish},
+          ),
+        );
+        await tester.pump();
+        await settle(tester);
+        expect(controller.paragraphs.single.translatedText, '[en] Salida');
+        expect(engines.languages.last.identified, isEmpty);
+      });
+
+      testWidgets('the same languages keep the engines', (tester) async {
+        await pumpControlled(tester);
+        await controller.setSourceLanguages({TranslateLanguage.hindi});
+        await tester.pump();
+        await controller.setSourceLanguages({TranslateLanguage.hindi});
+        await tester.pump();
+        expect(engines.texts, hasLength(2));
+      });
     });
 
     testWidgets('setTorch reaches the camera; restarts turn it off', (
@@ -1393,16 +1575,16 @@ void main() {
   });
 
   group('callbacks', () {
-    late List<List<TranslatedLine>> changes;
+    late List<List<TranslatedParagraph>> changes;
 
     setUp(() => changes = []);
 
-    group('onLinesChanged', () {
+    group('onParagraphsChanged', () {
       testWidgets('reports a translated paragraph without a controller', (
         tester,
       ) async {
         engines.lines = [_line('Salida')];
-        await pumpView(tester, app(onLinesChanged: changes.add));
+        await pumpView(tester, app(onParagraphsChanged: changes.add));
         await settle(tester);
         final line = changes.single.single;
         expect(line.rect, _mappedBox);
@@ -1411,7 +1593,7 @@ void main() {
 
       testWidgets('reports labels following a shift', (tester) async {
         engines.lines = [_line('Salida')];
-        await pumpView(tester, app(onLinesChanged: changes.add));
+        await pumpView(tester, app(onParagraphsChanged: changes.add));
         await settle(tester);
         await deliver(tester, dx: 16);
         await tester.pump();
@@ -1421,7 +1603,7 @@ void main() {
 
       testWidgets('reports a fade, then empty lines', (tester) async {
         engines.lines = [_line('Salida')];
-        await pumpView(tester, app(onLinesChanged: changes.add));
+        await pumpView(tester, app(onParagraphsChanged: changes.add));
         await settle(tester);
         await deliver(tester, seed: 7);
         for (var i = 0; i < 6; i++) {
@@ -1441,7 +1623,7 @@ void main() {
 
       testWidgets('is not called while nothing changes', (tester) async {
         engines.lines = [_line('Salida')];
-        await pumpView(tester, app(onLinesChanged: changes.add));
+        await pumpView(tester, app(onParagraphsChanged: changes.add));
         await tester.pump();
         expect(changes, isEmpty);
         await settle(tester);
@@ -1455,12 +1637,12 @@ void main() {
       testWidgets("matches the controller's lines", (tester) async {
         final controller = LiveTranslateController();
         addTearDown(controller.dispose);
-        final notified = <List<TranslatedLine>>[];
+        final notified = <List<TranslatedParagraph>>[];
         controller.addListener(() {
-          if (notified.isEmpty && controller.lines.isEmpty) return;
+          if (notified.isEmpty && controller.paragraphs.isEmpty) return;
           if (notified.isEmpty ||
-              !listEquals(notified.last, controller.lines)) {
-            notified.add(controller.lines);
+              !listEquals(notified.last, controller.paragraphs)) {
+            notified.add(controller.paragraphs);
           }
         });
         engines.lines = [_line('Salida')];
@@ -1468,8 +1650,8 @@ void main() {
           tester,
           app(
             controller: controller,
-            onLinesChanged: (lines) {
-              expect(lines, controller.lines);
+            onParagraphsChanged: (lines) {
+              expect(lines, controller.paragraphs);
               changes.add(lines);
             },
           ),
@@ -1487,7 +1669,7 @@ void main() {
 
     group('onFrozen', () {
       late LiveTranslateController controller;
-      late List<List<TranslatedLine>> frozen;
+      late List<List<TranslatedParagraph>> frozen;
 
       setUp(() {
         controller = LiveTranslateController();
@@ -1654,7 +1836,7 @@ void main() {
 
     group('overlayBuilder', () {
       const overlayKey = Key('overlay');
-      late List<List<TranslatedLine>> built;
+      late List<List<TranslatedParagraph>> built;
 
       setUp(() => built = []);
 
@@ -1825,7 +2007,7 @@ void main() {
       engines.textGate!.complete();
       await tester.pump();
       await tester.pump();
-      expect(controller.lines.single.translatedText, '[de] Salida');
+      expect(controller.paragraphs.single.translatedText, '[de] Salida');
       expect(metrics, hasLength(2));
     });
 

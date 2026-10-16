@@ -57,8 +57,9 @@ final class ParagraphLabel {
 const paragraphFontShare = 0.8;
 
 /// The font size for [text] laid out wrapping inside [inner]: 80% of
-/// [lineHeight], rounded down, shrinking one size at a time until the text
-/// fits, but not below the style's minimum.
+/// [lineHeight], rounded down and capped at the style's maximum, shrinking
+/// one size at a time until the text fits, but not below the style's
+/// minimum.
 double fitParagraphFontSize({
   required String text,
   required Size inner,
@@ -98,9 +99,13 @@ bool _fits(
 }
 
 /// The font size a label's translation starts at: 80% of its line height,
-/// rounded down, and at least the style's minimum.
+/// rounded down, no larger than the style's maximum and at least its
+/// minimum.
 int _startSize(double lineHeight, OverlayStyle style) => math.max(
-  (lineHeight * paragraphFontShare).floor(),
+  math.min(
+    (lineHeight * paragraphFontShare).floor(),
+    style.maxFontSize.floor(),
+  ),
   style.minFontSize.ceil(),
 );
 

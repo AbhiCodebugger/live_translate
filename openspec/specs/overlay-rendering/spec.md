@@ -54,7 +54,7 @@ A paragraph's label SHALL be drawn as one background covering the rectangle arou
 - **THEN** one background covers (20, 100)–(300, 144)
 
 ### Requirement: Paragraph text reflows at the original size
-A paragraph's translation SHALL be laid out as wrapping text inside its label's inner area. Its font size SHALL start at 80% of the paragraph's median line height, rounded down to a whole size, and SHALL shrink one size at a time until the text fits the inner area, but not below the style's minimum. If it doesn't fit at the minimum size, it SHALL be cut short with an ellipsis on its last visible line.
+A paragraph's translation SHALL be laid out as wrapping text inside its label's inner area. Its font size SHALL start at 80% of the paragraph's median line height, rounded down to a whole size, but no larger than the style's maximum, and SHALL shrink one size at a time until the text fits the inner area, but not below the style's minimum. If it doesn't fit at the minimum size, it SHALL be cut short with an ellipsis on its last visible line.
 
 #### Scenario: Translation the same length
 - **WHEN** a paragraph's lines are 20 high and its translation fits at size 16
@@ -69,8 +69,12 @@ A paragraph's translation SHALL be laid out as wrapping text inside its label's 
 - **THEN** it is drawn at size 10 and ends in an ellipsis inside the label
 
 #### Scenario: Large heading
-- **WHEN** a single-line heading is 50 high
-- **THEN** its translation starts at size 40, above the style's maximum of 28
+- **WHEN** a single-line heading is 50 high and the style's maximum is 28
+- **THEN** its translation starts at size 28, not 40
+
+#### Scenario: Larger maximum
+- **WHEN** a single-line heading is 50 high and the style's maximum is 48
+- **THEN** its translation starts at size 40
 
 ### Requirement: Paragraph labels stay inside the view
 A paragraph's label SHALL be limited to the part of its rectangle inside the view, and its translation SHALL be laid out within that part, so no text runs off the screen.
@@ -95,15 +99,15 @@ When a paragraph's translation doesn't fit its label's inner area at the startin
 - **THEN** the label keeps its original rectangle
 
 ### Requirement: An app overlay replaces the built-in labels
-When the app gives the view an `overlayBuilder`, the view SHALL NOT draw its own labels. It SHALL lay the builder's widget over the whole view, above the preview, and rebuild it with the lines the view shows, as the controller reports them, whenever they change. The progress indicator during a frozen read SHALL still be shown above it.
+When the app gives the view an `overlayBuilder`, the view SHALL NOT draw its own labels. It SHALL lay the builder's widget over the whole view, above the preview, and rebuild it with the paragraphs the view shows, as the controller reports them, whenever they change. The progress indicator during a frozen read SHALL still be shown above it.
 
 #### Scenario: Custom labels
 - **WHEN** a settled read shows one translated paragraph at (17.5, 125)–(142.5, 162.5) and the view has an `overlayBuilder`
-- **THEN** no built-in label is drawn, and the builder receives one `TranslatedLine` with that rectangle and translation
+- **THEN** no built-in label is drawn, and the builder receives one `TranslatedParagraph` with that rectangle and translation
 
 #### Scenario: Overlay fills the view
 - **WHEN** the view is 360 × 800 and has an `overlayBuilder`
-- **THEN** the builder's widget is laid out at (0, 0)–(360, 800), so a line's rectangle can be used as a position inside it
+- **THEN** the builder's widget is laid out at (0, 0)–(360, 800), so a paragraph's rectangle can be used as a position inside it
 
 #### Scenario: Labels follow a shift
 - **WHEN** the held labels move 10 view pixels to the right
@@ -111,7 +115,7 @@ When the app gives the view an `overlayBuilder`, the view SHALL NOT draw its own
 
 #### Scenario: Fading labels
 - **WHEN** a held result fades out after a new scene
-- **THEN** the builder receives the lines at decreasing opacity, and finally an empty list
+- **THEN** the builder receives the paragraphs at decreasing opacity, and finally an empty list
 
 #### Scenario: Untranslated lines
 - **WHEN** a paragraph's translation is its own text

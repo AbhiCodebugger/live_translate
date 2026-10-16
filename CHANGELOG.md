@@ -1,5 +1,20 @@
 ## Unreleased
 
+**Breaking:** the API is renamed before 1.0 to say what it holds. Rename:
+
+| Before | After |
+|---|---|
+| `TranslatedLine` | `TranslatedParagraph` |
+| `LiveTranslateController.lines` | `LiveTranslateController.paragraphs` |
+| `LiveTranslateView.onLinesChanged` | `LiveTranslateView.onParagraphsChanged` |
+| `OverlayBuilder`'s `lines` parameter | `paragraphs` |
+
+The fields of `TranslatedParagraph` are unchanged, and `onFrozen` keeps its name.
+
+* Paragraph ids now stay the same while the view keeps reading a paragraph in the same place: re-reads while the language settles, after a download or a target change, after a small pan, and on freeze. A new scene gets new ids.
+* `LiveTranslateController.setSourceLanguages`: change the expected source languages, or go back to detection with `null`, without restarting the camera. The most recent change wins, whether from the controller or the widget.
+* `OverlayStyle.maxFontSize` now caps a label's starting size (default 28). Large headings that used to get labels as big as the heading now stop at 28; raise `maxFontSize` to get them back.
+
 * `LiveTranslateView.overlayBuilder`: draw the translations yourself. The new `OverlayBuilder` receives the shown lines, in the view's coordinates, and replaces the built-in labels.
 * `LiveTranslateView.onLinesChanged`: called whenever the shown lines change, with or without a controller.
 * `LiveTranslateView.onFrozen`: called with the frozen picture's lines once its translation is shown, and again if it is read again.

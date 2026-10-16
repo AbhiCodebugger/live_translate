@@ -5,7 +5,7 @@ import 'package:live_translate/live_translate.dart';
 
 void main() {
   test('the entry library exposes the public models', () {
-    const line = TranslatedLine(
+    const line = TranslatedParagraph(
       id: 'a',
       sourceText: 'Hola',
       translatedText: 'Hello',
@@ -75,18 +75,18 @@ void main() {
   });
 
   test('the entry library exposes the view hooks', () {
-    Widget overlay(BuildContext context, List<TranslatedLine> lines) =>
+    Widget overlay(BuildContext context, List<TranslatedParagraph> lines) =>
         const SizedBox();
     final OverlayBuilder builder = overlay;
-    void report(List<TranslatedLine> lines) {}
+    void report(List<TranslatedParagraph> lines) {}
     final view = LiveTranslateView(
       overlayBuilder: builder,
-      onLinesChanged: report,
+      onParagraphsChanged: report,
       onFrozen: report,
       placeholderBuilder: (context) => const SizedBox(),
     );
     expect(view.overlayBuilder, same(builder));
-    expect(view.onLinesChanged, isNotNull);
+    expect(view.onParagraphsChanged, isNotNull);
     expect(view.onFrozen, isNotNull);
     expect(view.placeholderBuilder, isNotNull);
   });

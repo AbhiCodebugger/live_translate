@@ -17,7 +17,7 @@ const LiveTranslateView();
 - **Latin and Devanagari.** English, Spanish, French, German and the other Latin-script languages, plus Hindi and Marathi, are read at the same time.
 - **Automatic languages.** Each paragraph's language is detected, and the models it needs download on their own. The target defaults to the phone's language.
 - **Freeze.** Pause on the current picture to read the translation at leisure.
-- **Programmatic control.** An optional `LiveTranslateController` reports state, lines and how far language detection has got, and changes the language, scripts and torch without restarting the camera.
+- **Programmatic control.** An optional `LiveTranslateController` reports state, lines and how far language detection has got, and changes the languages, scripts and torch without restarting the camera.
 - **Your own look.** Draw the translations yourself with `overlayBuilder`, and show your own screen while the camera starts with `placeholderBuilder`.
 - **Measurable.** `controller.metrics` reports how long each read took, stage by stage, and `showDebugHud` shows the numbers over the camera.
 
@@ -162,22 +162,22 @@ class _FreezeScreenState extends State<FreezeScreen> {
 }
 ```
 
-While frozen, `_controller.lines` holds one `TranslatedLine` per translated paragraph, with its source text, translation, source language and position. `_controller.targetLanguage` is the language being translated into, and `setTargetLanguage`, `setScripts` and `setTorch` change the view without restarting the camera. `_controller.metrics` reports how long each read took; see [Measuring performance](#measuring-performance).
+While frozen, `_controller.paragraphs` holds one `TranslatedParagraph` per translated paragraph, with its source text, translation, source language and position. `_controller.targetLanguage` is the language being translated into, and `setTargetLanguage`, `setScripts`, `setSourceLanguages` and `setTorch` change the view without restarting the camera. `_controller.metrics` reports how long each read took; see [Measuring performance](#measuring-performance).
 
 ### Act on a freeze
 
-`onFrozen` is called once the frozen picture's translation is shown, with its lines. Here it opens a sheet of the translations:
+`onFrozen` is called once the frozen picture's translation is shown, with its paragraphs. Here it opens a sheet of the translations:
 
 ```dart
 LiveTranslateView(
-  onFrozen: (lines) => showModalBottomSheet<void>(
+  onFrozen: (paragraphs) => showModalBottomSheet<void>(
     context: context,
     builder: (context) => ListView(
       children: [
-        for (final line in lines)
+        for (final paragraph in paragraphs)
           ListTile(
-            title: Text(line.translatedText),
-            subtitle: Text(line.sourceText),
+            title: Text(paragraph.translatedText),
+            subtitle: Text(paragraph.sourceText),
           ),
       ],
     ),
@@ -185,25 +185,26 @@ LiveTranslateView(
 );
 ```
 
-It is called again when the frozen picture is read again, for example after a change of target language, so update what it opened rather than opening it twice. To follow every change instead, including labels moving with the camera and fading, use `onLinesChanged`.
+It is called again when the frozen picture is read again, for example after a change of target language, so update what it opened rather than opening it twice. To follow every change instead, including labels moving with the camera and fading, use `onParagraphsChanged`.
 
 ### Custom labels
 
-`overlayBuilder` replaces the built-in labels. Its widget is laid over the whole view, and each line's `rect` is a position inside it:
+`overlayBuilder` replaces the built-in labels. Its widget is laid over the whole view, and each paragraph's `rect` is a position inside it:
 
 ```dart
 LiveTranslateView(
-  overlayBuilder: (context, lines) => Stack(
+  overlayBuilder: (context, paragraphs) => Stack(
     children: [
-      for (final line in lines)
+      for (final paragraph in paragraphs)
         Positioned.fromRect(
-          rect: line.rect,
+          key: ValueKey(paragraph.id),
+          rect: paragraph.rect,
           child: Opacity(
-            opacity: line.opacity,
+            opacity: paragraph.opacity,
             child: Container(
               color: Colors.yellow,
               alignment: Alignment.centerLeft,
-              child: Text(line.translatedText),
+              child: Text(paragraph.translatedText),
             ),
           ),
         ),
@@ -213,6 +214,8 @@ LiveTranslateView(
 ```
 
 Honour `opacity`: it is how labels fade out. With an overlay, `OverlayStyle` is unused, and the page's colours aren't available.
+
+A paragraph's `id` stays the same while the view keeps reading it in the same place: when it reads again while the language settles, after a download or a change of target language, after a small pan, and on freeze. A paragraph that now overlaps at least half of one shown before takes its id. Key widgets by it, as above, to keep their state or animate a new translation. A new scene, or a paragraph somewhere new, gets a new id.
 
 To replace the progress indicator shown while the camera starts, pass `placeholderBuilder`:
 
@@ -375,6 +378,8 @@ Every camera frame is used only to measure how the picture moves, from a small b
 2. The lines are grouped into paragraphs.
 3. Each paragraph's language is detected and the paragraph is translated, with a cache.
 4. The page's colours are sampled behind each paragraph.
+
+Each label covers its paragraph in the page's colours. Its text starts at the original text's size, but never above `OverlayStyle.maxFontSize` (28 by default, so large headings get a readable label rather than a giant one), and shrinks towards `minFontSize` until the translation fits. Pass `style: OverlayStyle(maxFontSize: 48)` for bigger headings.
 
 While the result is held, the labels move with the measured camera shift, and no more frames are read once the source language is settled. Until then, while the [source status](#following-language-detection) is searching or guessed, a steady picture is read again a second after each read, so a short sign confirms its language in a few seconds without moving the phone. A fast movement or a new scene fades the labels out, and the next steady picture is read again. Reads never queue, so the camera never falls behind.
 

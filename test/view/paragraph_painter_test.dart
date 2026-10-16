@@ -8,11 +8,16 @@ import 'package:live_translate/src/view/paragraph_painter.dart';
 
 const _style = OverlayStyle();
 
-double _fit(String text, Size inner, double lineHeight) => fitParagraphFontSize(
+double _fit(
+  String text,
+  Size inner,
+  double lineHeight, {
+  OverlayStyle style = _style,
+}) => fitParagraphFontSize(
   text: text,
   inner: inner,
   lineHeight: lineHeight,
-  style: _style,
+  style: style,
   direction: TextDirection.ltr,
 );
 
@@ -33,8 +38,20 @@ void main() {
       expect(_fit('word ' * 200, const Size(300, 44), 20), 10);
     });
 
-    test('a 50-high heading starts at 40, above the live maximum', () {
-      expect(_fit('Why', const Size(300, 50), 50), 40);
+    test('a 50-high heading stops at the default maximum of 28', () {
+      expect(_fit('Why', const Size(300, 50), 50), 28);
+    });
+
+    test('a larger maximum lets a 50-high heading start at 40', () {
+      expect(
+        _fit(
+          'Why',
+          const Size(300, 50),
+          50,
+          style: const OverlayStyle(maxFontSize: 48),
+        ),
+        40,
+      );
     });
   });
 

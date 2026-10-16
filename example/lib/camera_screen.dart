@@ -25,7 +25,7 @@ typedef ViewBuilder =
       required Set<TextScript> scripts,
       required ResolutionPreset resolution,
       required ValueChanged<LiveTranslateException> onError,
-      required ValueChanged<List<TranslatedLine>> onFrozen,
+      required ValueChanged<List<TranslatedParagraph>> onFrozen,
       required bool showDebugHud,
     });
 
@@ -36,7 +36,7 @@ LiveTranslateView _buildView({
   required Set<TextScript> scripts,
   required ResolutionPreset resolution,
   required ValueChanged<LiveTranslateException> onError,
-  required ValueChanged<List<TranslatedLine>> onFrozen,
+  required ValueChanged<List<TranslatedParagraph>> onFrozen,
   required bool showDebugHud,
 }) => LiveTranslateView(
   controller: controller,
@@ -91,9 +91,9 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _showHud = false;
   LiveTranslateState _lastState = LiveTranslateState.initializing;
 
-  // The frozen picture's lines once its translation is shown; `null` while
+  // The frozen picture's paragraphs once its translation is shown; `null` while
   // it is read, and while not frozen.
-  final _frozenLines = ValueNotifier<List<TranslatedLine>?>(null);
+  final _frozenParagraphs = ValueNotifier<List<TranslatedParagraph>?>(null);
 
   // Models the view reported missing that aren't on the device yet.
   final _pending = <TranslateLanguage>{};
@@ -110,7 +110,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void dispose() {
     _poll?.cancel();
-    _frozenLines.dispose();
+    _frozenParagraphs.dispose();
     _controller
       ..removeListener(_onControllerChanged)
       ..dispose();
@@ -132,7 +132,7 @@ class _CameraScreenState extends State<CameraScreen> {
         _torch) {
       setState(() => _torch = false);
     }
-    if (state != LiveTranslateState.frozen) _frozenLines.value = null;
+    if (state != LiveTranslateState.frozen) _frozenParagraphs.value = null;
     _lastState = state;
   }
 
@@ -146,14 +146,14 @@ class _CameraScreenState extends State<CameraScreen> {
     if (_controller.state == LiveTranslateState.frozen) {
       return _controller.resume();
     }
-    _frozenLines.value = null;
+    _frozenParagraphs.value = null;
     return _controller.freeze();
   }
 
-  void _onFrozen(List<TranslatedLine> lines) {
+  void _onFrozen(List<TranslatedParagraph> paragraphs) {
     // A late report after resuming isn't shown.
     if (_controller.state == LiveTranslateState.frozen) {
-      _frozenLines.value = lines;
+      _frozenParagraphs.value = paragraphs;
     }
   }
 
@@ -320,15 +320,17 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: Padding(
                           padding: const EdgeInsets.only(right: 16),
                           child: ValueListenableBuilder(
-                            valueListenable: _frozenLines,
-                            builder: (context, lines, _) =>
-                                lines == null || lines.isEmpty
+                            valueListenable: _frozenParagraphs,
+                            builder: (context, paragraphs, _) =>
+                                paragraphs == null || paragraphs.isEmpty
                                 ? const SizedBox.shrink()
                                 : Tooltip(
                                     message: 'Show text',
                                     child: FilledButton.tonalIcon(
-                                      onPressed: () =>
-                                          showTextSheet(context, _frozenLines),
+                                      onPressed: () => showTextSheet(
+                                        context,
+                                        _frozenParagraphs,
+                                      ),
                                       icon: const Icon(Icons.notes),
                                       label: const Text('Text'),
                                     ),

@@ -8,22 +8,22 @@ import 'package:live_translate/live_translate.dart';
 /// Opens a sheet listing the frozen picture's paragraphs, each translation
 /// over its original, with buttons to copy one or all of them.
 ///
-/// The sheet follows [lines]: it shows the new translation when the frozen
-/// picture is read again, and closes when [lines] becomes `null`.
+/// The sheet follows [paragraphs]: it shows the new translation when the frozen
+/// picture is read again, and closes when [paragraphs] becomes `null`.
 Future<void> showTextSheet(
   BuildContext context,
-  ValueListenable<List<TranslatedLine>?> lines,
+  ValueListenable<List<TranslatedParagraph>?> paragraphs,
 ) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,
-  builder: (context) => _TextSheet(lines: lines),
+  builder: (context) => _TextSheet(paragraphs: paragraphs),
 );
 
 class _TextSheet extends StatefulWidget {
-  const _TextSheet({required this.lines});
+  const _TextSheet({required this.paragraphs});
 
-  final ValueListenable<List<TranslatedLine>?> lines;
+  final ValueListenable<List<TranslatedParagraph>?> paragraphs;
 
   @override
   State<_TextSheet> createState() => _TextSheetState();
@@ -37,18 +37,18 @@ class _TextSheetState extends State<_TextSheet> {
   @override
   void initState() {
     super.initState();
-    widget.lines.addListener(_onLines);
+    widget.paragraphs.addListener(_onParagraphs);
   }
 
   @override
   void dispose() {
     _copiedTimer?.cancel();
-    widget.lines.removeListener(_onLines);
+    widget.paragraphs.removeListener(_onParagraphs);
     super.dispose();
   }
 
-  void _onLines() {
-    if (widget.lines.value == null) {
+  void _onParagraphs() {
+    if (widget.paragraphs.value == null) {
       Navigator.of(context).pop();
     } else {
       setState(() {});
@@ -67,7 +67,7 @@ class _TextSheetState extends State<_TextSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final lines = widget.lines.value ?? const <TranslatedLine>[];
+    final paragraphs = widget.paragraphs.value ?? const <TranslatedParagraph>[];
     final theme = Theme.of(context);
     return DraggableScrollableSheet(
       expand: false,
@@ -90,8 +90,9 @@ class _TextSheetState extends State<_TextSheet> {
                   ),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed: () =>
-                      _copy(lines.map((l) => l.translatedText).join('\n\n')),
+                  onPressed: () => _copy(
+                    paragraphs.map((p) => p.translatedText).join('\n\n'),
+                  ),
                   icon: const Icon(Icons.copy_all),
                   label: const Text('Copy all'),
                 ),
@@ -101,9 +102,9 @@ class _TextSheetState extends State<_TextSheet> {
           Expanded(
             child: ListView.builder(
               controller: scrollController,
-              itemCount: lines.length,
+              itemCount: paragraphs.length,
               itemBuilder: (context, index) {
-                final line = lines[index];
+                final line = paragraphs[index];
                 return ListTile(
                   title: Text(line.translatedText),
                   subtitle: Text(line.sourceText),

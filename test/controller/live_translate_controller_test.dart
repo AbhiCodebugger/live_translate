@@ -7,7 +7,7 @@ import 'package:live_translate/src/controller/live_translate_controller.dart';
 import 'package:live_translate/src/controller/live_translate_state.dart';
 import 'package:live_translate/src/models/source_status.dart';
 import 'package:live_translate/src/models/text_script.dart';
-import 'package:live_translate/src/models/translated_line.dart';
+import 'package:live_translate/src/models/translated_paragraph.dart';
 import 'package:live_translate/src/pipeline/pipeline_metrics.dart';
 
 final class _Host implements ControllerHost {
@@ -28,10 +28,14 @@ final class _Host implements ControllerHost {
       calls.add('scripts ${scripts.map((s) => s.name).join(',')}');
 
   @override
+  Future<void> setSourceLanguages(Set<TranslateLanguage>? languages) async =>
+      calls.add('sources ${languages?.map((l) => l.name).join(',')}');
+
+  @override
   Future<void> setTorch(bool on) async => calls.add('torch $on');
 }
 
-const _line = TranslatedLine(
+const _line = TranslatedParagraph(
   id: 't1',
   sourceText: 'निकास',
   translatedText: 'Exit',
@@ -43,6 +47,8 @@ Future<void> _callEverything(LiveTranslateController controller) async {
   await controller.resume();
   await controller.setTargetLanguage(TranslateLanguage.french);
   await controller.setScripts({TextScript.latin, TextScript.devanagari});
+  await controller.setSourceLanguages({TranslateLanguage.hindi});
+  await controller.setSourceLanguages(null);
   await controller.setTorch(true);
 }
 
@@ -60,7 +66,7 @@ void main() {
 
   test('an unattached controller is initializing, empty and inert', () async {
     expect(controller.state, LiveTranslateState.initializing);
-    expect(controller.lines, isEmpty);
+    expect(controller.paragraphs, isEmpty);
     expect(controller.targetLanguage, isNull);
     await _callEverything(controller);
     expect(notifications, 0);
@@ -74,6 +80,8 @@ void main() {
       'resume',
       'target french',
       'scripts latin,devanagari',
+      'sources hindi',
+      'sources null',
       'torch true',
     ]);
   });
@@ -82,7 +90,7 @@ void main() {
     void publish(SourceStatus status) => publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: const [],
+      paragraphs: const [],
       target: TranslateLanguage.english,
       sourceStatus: status,
     );
@@ -121,11 +129,11 @@ void main() {
     publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: const [_line],
+      paragraphs: const [_line],
       target: TranslateLanguage.english,
     );
     expect(controller.state, LiveTranslateState.running);
-    expect(controller.lines, const [_line]);
+    expect(controller.paragraphs, const [_line]);
     expect(controller.targetLanguage, TranslateLanguage.english);
     expect(notifications, 1);
   });
@@ -135,13 +143,13 @@ void main() {
     publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: const [],
+      paragraphs: const [],
       target: TranslateLanguage.english,
     );
     publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: const [],
+      paragraphs: const [],
       target: TranslateLanguage.french,
     );
     expect(controller.targetLanguage, TranslateLanguage.french);
@@ -153,13 +161,13 @@ void main() {
     publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: const [_line],
+      paragraphs: const [_line],
       target: TranslateLanguage.english,
     );
     publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: [_line],
+      paragraphs: [_line],
       target: TranslateLanguage.english,
     );
     expect(notifications, 1);
@@ -169,10 +177,10 @@ void main() {
     publishToController(
       controller,
       state: LiveTranslateState.running,
-      lines: [_line],
+      paragraphs: [_line],
       target: TranslateLanguage.english,
     );
-    expect(() => controller.lines.add(_line), throwsUnsupportedError);
+    expect(() => controller.paragraphs.add(_line), throwsUnsupportedError);
   });
 
   test('a controller drives only one view at a time', () {
@@ -187,14 +195,14 @@ void main() {
     publishToController(
       controller,
       state: LiveTranslateState.frozen,
-      lines: const [_line],
+      paragraphs: const [_line],
       target: TranslateLanguage.english,
     );
     detachController(controller, host);
     await _callEverything(controller);
     expect(host.calls, isEmpty);
     expect(controller.state, LiveTranslateState.initializing);
-    expect(controller.lines, isEmpty);
+    expect(controller.paragraphs, isEmpty);
     expect(controller.targetLanguage, isNull);
   });
 

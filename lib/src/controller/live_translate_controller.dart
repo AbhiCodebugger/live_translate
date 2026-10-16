@@ -6,7 +6,7 @@ import 'package:google_mlkit_translation/google_mlkit_translation.dart'
 
 import '../models/source_status.dart';
 import '../models/text_script.dart';
-import '../models/translated_line.dart';
+import '../models/translated_paragraph.dart';
 import '../pipeline/pipeline_metrics.dart';
 import 'live_translate_state.dart';
 
@@ -23,7 +23,7 @@ import 'live_translate_state.dart';
 /// );
 ///
 /// await controller.freeze();
-/// final shown = controller.lines.map((line) => line.translatedText);
+/// final shown = controller.paragraphs.map((p) => p.translatedText);
 /// ```
 ///
 /// Calls made before the view is shown, or after it is gone, do nothing.
@@ -31,7 +31,7 @@ import 'live_translate_state.dart';
 /// recent change.
 class LiveTranslateController extends ChangeNotifier {
   LiveTranslateState _state = LiveTranslateState.initializing;
-  List<TranslatedLine> _lines = const [];
+  List<TranslatedParagraph> _paragraphs = const [];
   TranslateLanguage? _targetLanguage;
   SourceStatus _sourceStatus = const SourceSearching();
   ControllerHost? _host;
@@ -40,8 +40,9 @@ class LiveTranslateController extends ChangeNotifier {
   /// What the view is doing.
   LiveTranslateState get state => _state;
 
-  /// The lines the view shows, with rectangles in the view's coordinates.
-  List<TranslatedLine> get lines => _lines;
+  /// The paragraphs the view shows, with rectangles in the view's
+  /// coordinates.
+  List<TranslatedParagraph> get paragraphs => _paragraphs;
 
   /// The language the view translates into: the one the app chose, or the
   /// device-language default when it chose none.
@@ -84,8 +85,8 @@ class LiveTranslateController extends ChangeNotifier {
   /// Pauses the preview and translates the frozen picture once, paragraph
   /// by paragraph, in the page's colours. Nothing moves until [resume].
   ///
-  /// While the picture is read, [lines] is empty and the view shows a
-  /// progress indicator; then [lines] holds one entry per translated
+  /// While the picture is read, [paragraphs] is empty and the view shows a
+  /// progress indicator; then [paragraphs] holds one entry per translated
   /// paragraph. Changing the language or scripts while frozen reads the same
   /// picture again. Has no effect unless [state] is
   /// [LiveTranslateState.running].
@@ -103,6 +104,16 @@ class LiveTranslateController extends ChangeNotifier {
   Future<void> setScripts(Set<TextScript> scripts) =>
       _host?.setScripts(scripts) ?? Future.value();
 
+  /// Expects text in [languages] from now on, or detects each paragraph's
+  /// language when `null`, without restarting the camera. A single language
+  /// skips detection entirely.
+  ///
+  /// ```dart
+  /// await controller.setSourceLanguages({TranslateLanguage.hindi});
+  /// ```
+  Future<void> setSourceLanguages(Set<TranslateLanguage>? languages) =>
+      _host?.setSourceLanguages(languages) ?? Future.value();
+
   /// Turns the torch on or off. Has no effect on a camera without a torch.
   /// The torch turns off whenever the camera restarts.
   Future<void> setTorch(bool on) => _host?.setTorch(on) ?? Future.value();
@@ -115,12 +126,12 @@ class LiveTranslateController extends ChangeNotifier {
 
   void _publish(
     LiveTranslateState state,
-    List<TranslatedLine> lines,
+    List<TranslatedParagraph> paragraphs,
     TranslateLanguage target,
     SourceStatus sourceStatus,
   ) {
     _state = state;
-    _lines = List.unmodifiable(lines);
+    _paragraphs = List.unmodifiable(paragraphs);
     _targetLanguage = target;
     _sourceStatus = sourceStatus;
     notifyListeners();
@@ -142,6 +153,9 @@ abstract interface class ControllerHost {
   /// See [LiveTranslateController.setScripts].
   Future<void> setScripts(Set<TextScript> scripts);
 
+  /// See [LiveTranslateController.setSourceLanguages].
+  Future<void> setSourceLanguages(Set<TranslateLanguage>? languages);
+
   /// See [LiveTranslateController.setTorch].
   Future<void> setTorch(bool on);
 }
@@ -158,14 +172,14 @@ void attachController(LiveTranslateController controller, ControllerHost host) {
 
 /// Disconnects [controller] from [host], if it is attached to it. The
 /// controller goes back to reporting [LiveTranslateState.initializing] with
-/// no lines and no target language, without notifying: this happens while
+/// no paragraphs and no target language, without notifying: this happens while
 /// the view is torn down.
 void detachController(LiveTranslateController controller, ControllerHost host) {
   if (!identical(controller._host, host)) return;
   controller
     .._host = null
     .._state = LiveTranslateState.initializing
-    .._lines = const []
+    .._paragraphs = const []
     .._targetLanguage = null
     .._sourceStatus = const SourceSearching();
 }
@@ -175,17 +189,17 @@ void detachController(LiveTranslateController controller, ControllerHost host) {
 void publishToController(
   LiveTranslateController controller, {
   required LiveTranslateState state,
-  required List<TranslatedLine> lines,
+  required List<TranslatedParagraph> paragraphs,
   required TranslateLanguage target,
   SourceStatus sourceStatus = const SourceSearching(),
 }) {
   if (state == controller._state &&
-      listEquals(lines, controller._lines) &&
+      listEquals(paragraphs, controller._paragraphs) &&
       target == controller._targetLanguage &&
       sourceStatus == controller._sourceStatus) {
     return;
   }
-  controller._publish(state, lines, target, sourceStatus);
+  controller._publish(state, paragraphs, target, sourceStatus);
 }
 
 /// Emits [metrics] on [controller]'s [LiveTranslateController.metrics], if

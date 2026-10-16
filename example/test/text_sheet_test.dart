@@ -4,26 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:live_translate/live_translate.dart';
 import 'package:live_translate_example/text_sheet.dart';
 
-TranslatedLine _line(String translated, String source, int i) => TranslatedLine(
-  id: 'p$i',
-  sourceText: source,
-  translatedText: translated,
-  rect: Rect.fromLTWH(0, 40.0 * i, 100, 30),
-);
+TranslatedParagraph _line(String translated, String source, int i) =>
+    TranslatedParagraph(
+      id: 'p$i',
+      sourceText: source,
+      translatedText: translated,
+      rect: Rect.fromLTWH(0, 40.0 * i, 100, 30),
+    );
 
 void main() {
-  late ValueNotifier<List<TranslatedLine>?> lines;
+  late ValueNotifier<List<TranslatedParagraph>?> paragraphs;
   late List<String> clipboard;
 
   setUp(() {
-    lines = ValueNotifier([
+    paragraphs = ValueNotifier([
       _line('Exit', 'Salida', 0),
       _line('Entrance', 'Entrada', 1),
     ]);
     clipboard = [];
   });
 
-  tearDown(() => lines.dispose());
+  tearDown(() => paragraphs.dispose());
 
   Future<void> openSheet(WidgetTester tester) async {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -39,7 +40,7 @@ void main() {
       MaterialApp(
         home: Builder(
           builder: (context) => TextButton(
-            onPressed: () => showTextSheet(context, lines),
+            onPressed: () => showTextSheet(context, paragraphs),
             child: const Text('open'),
           ),
         ),
@@ -80,7 +81,7 @@ void main() {
 
   testWidgets('follows a new translation', (tester) async {
     await openSheet(tester);
-    lines.value = [_line('Ausgang', 'Salida', 0)];
+    paragraphs.value = [_line('Ausgang', 'Salida', 0)];
     await tester.pump();
     expect(find.text('Ausgang'), findsOneWidget);
     expect(find.text('Exit'), findsNothing);
@@ -107,7 +108,7 @@ void main() {
 
   testWidgets('closes when the view resumes', (tester) async {
     await openSheet(tester);
-    lines.value = null;
+    paragraphs.value = null;
     await tester.pumpAndSettle();
     expect(find.text('Copy all'), findsNothing);
   });
