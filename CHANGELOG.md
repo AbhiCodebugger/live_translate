@@ -24,6 +24,7 @@ The fields of `TranslatedParagraph` are unchanged, and `onFrozen` keeps its name
 * `SourceStatus` and `LiveTranslateController.sourceStatus`: where finding the source language stands (searching, guessed, downloading, ready, unsupported, not found or download failed), to show progress before the first translation.
 * A steady picture whose language isn't settled is read again every second, so short text confirms its language without moving the phone. After three reads that find no language, the status says so.
 * Languages that can't be translated, such as lorem ipsum identified as Latin, no longer outvote a translatable language in the same script.
+* A Devanagari paragraph identified only as a language ML Kit can't translate, such as a Hindi sign taken for Nepali, is now translated from Hindi or Marathi instead of being left untranslated. Before, a short Hindi sign could show nothing at all.
 
 ## 0.1.0
 

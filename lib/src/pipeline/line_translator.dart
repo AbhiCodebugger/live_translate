@@ -316,6 +316,10 @@ final class LineTranslator {
   }
 
   /// The qualifying language guesses for [line], most confident first.
+  ///
+  /// A Devanagari line whose qualifying guesses are all untranslatable, such
+  /// as Hindi identified as Nepali, gets a Hindi or Marathi guess instead
+  /// (see [_devanagariFallback]).
   Future<List<LanguageGuess>> _guess(
     RecognizedLine line,
     Set<TranslateLanguage>? hint,
@@ -328,7 +332,48 @@ final class LineTranslator {
           ? [LanguageGuess(hint.single.bcpCode, 1)]
           : const [];
     }
-    return qualifyingGuesses(await _languages.identify(line.text), hint);
+    final candidates = await _languages.identify(line.text);
+    final qualifying = qualifyingGuesses(candidates, hint);
+    if (qualifying.any((guess) => _isTranslatable(guess.tag)) ||
+        !hasLetterOf(line.text, TextScript.devanagari)) {
+      return qualifying;
+    }
+    final fallback = _devanagariFallback(candidates, hint);
+    return fallback == null ? qualifying : [fallback];
+  }
+
+  /// A Hindi or Marathi guess standing in for the confident untranslatable
+  /// guess among [candidates], or `null` when there is none.
+  ///
+  /// It takes that guess's confidence, so it can confirm its language as the
+  /// untranslatable one would have: Hindi's own score on such a line is too
+  /// low to ever confirm. The language is whichever of Hindi and Marathi the
+  /// candidates rank higher, among those in [hint] when one is given, or
+  /// Hindi when neither is a candidate.
+  LanguageGuess? _devanagariFallback(
+    List<LanguageGuess> candidates,
+    Set<TranslateLanguage>? hint,
+  ) {
+    final untranslatable = [
+      for (final guess in candidates)
+        if (guess.tag != 'und' &&
+            guess.confidence >= minLanguageConfidence &&
+            !_isTranslatable(guess.tag))
+          guess.confidence,
+    ];
+    final allowed = [
+      for (final language in _devanagariLanguages)
+        if (hint == null || hint.contains(language)) language.bcpCode,
+    ];
+    if (untranslatable.isEmpty || allowed.isEmpty) return null;
+    final ranked = [
+      for (final guess in candidates)
+        if (allowed.contains(guess.tag)) guess,
+    ]..sort((a, b) => b.confidence.compareTo(a.confidence));
+    return LanguageGuess(
+      ranked.firstOrNull?.tag ?? allowed.first,
+      untranslatable.reduce(max),
+    );
   }
 
   /// Gives each line its source language for this [frame], recording the
@@ -339,7 +384,8 @@ final class LineTranslator {
   /// so one line misread as a related language (Hindi as Marathi) follows
   /// the others. A line whose own best guess is [target] keeps it, so it is
   /// still dropped, and doesn't vote. Lines in neither script keep their own
-  /// best guess.
+  /// best guess. Untranslatable Devanagari guesses never get here: [_guess]
+  /// has already replaced them with Hindi or Marathi.
   List<String?> _settle(
     List<RecognizedLine> lines,
     List<List<LanguageGuess>> guesses,

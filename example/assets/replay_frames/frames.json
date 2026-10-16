@@ -1,0 +1,164 @@
+{
+  "frames": [
+    {
+      "file": "hi_exit.jpg",
+      "note": "Red sign, single word निकास",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "निकास", "language": "hi", "translation": ["exit", "outlet", "exhaust"] }
+      ]
+    },
+    {
+      "file": "hi_no_smoking.jpg",
+      "note": "White sign, धूम्रपान वर्जित है",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "धूम्रपान", "language": "hi", "translation": ["smoking"] }
+      ]
+    },
+    {
+      "file": "hi_notice.jpg",
+      "note": "Library notice, three Hindi lines",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "रविवार", "language": "hi", "translation": ["sunday"] },
+        { "source": "जुर्माना", "language": "hi", "translation": ["fine", "penalty"] }
+      ]
+    },
+    {
+      "file": "hi_caution.jpg",
+      "note": "Yellow caution sign, deep water ahead",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "गहरा पानी", "language": "hi", "translation": ["water"] }
+      ]
+    },
+    {
+      "file": "mr_no_parking.jpg",
+      "note": "Blue Marathi no-parking sign",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "वाहन", "language": "mr", "translation": ["vehicle", "park"] }
+      ]
+    },
+    {
+      "file": "mixed_station.jpg",
+      "note": "Green station boards, Hindi above English",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "प्रवेश", "language": "hi", "translation": ["entry", "entrance", "admission", "enter"] },
+        { "source": "टिकट घर", "language": "hi", "translation": ["ticket"] }
+      ]
+    },
+    {
+      "file": "mixed_shop.jpg",
+      "note": "Medical store boards, Hindi above English",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "दवा की दुकान", "language": "hi", "translation": ["medicine", "medical", "pharmacy", "drug"] },
+        { "source": "सुबह", "language": "hi", "translation": ["morning", "9"] }
+      ]
+    },
+    {
+      "file": "es_menu_lunch.jpg",
+      "note": "Menú del día, printed menu",
+      "target": "en",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "sopa de verduras", "language": "es", "translation": ["soup"] },
+        { "source": "pollo asado", "language": "es", "translation": ["chicken"] }
+      ]
+    },
+    {
+      "file": "es_menu_breakfast.jpg",
+      "note": "Desayunos, printed menu",
+      "target": "en",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "churros con chocolate", "language": "es", "translation": ["hot"] },
+        { "source": "huevos revueltos", "language": "es", "translation": ["egg"] }
+      ]
+    },
+    {
+      "file": "fr_station.jpg",
+      "note": "French page about a train station",
+      "target": "en",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "gare du centre", "language": "fr", "translation": ["station"] },
+        { "source": "dernier train", "language": "fr", "translation": ["last", "final"] }
+      ]
+    },
+    {
+      "file": "fr_library.jpg",
+      "note": "French page about library hours",
+      "target": "en",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "bibliothèque municipale", "language": "fr", "translation": ["library"] },
+        { "source": "garder le silence", "language": "fr", "translation": ["silence", "quiet"] }
+      ]
+    },
+    {
+      "file": "de_wet_paint.jpg",
+      "note": "Yellow German wet-paint sign",
+      "target": "en",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "gestrichen", "language": "de", "translation": ["paint"] },
+        { "source": "bitte nicht berühren", "language": "de", "translation": ["touch"] }
+      ]
+    },
+    {
+      "file": "en_garden.jpg",
+      "note": "English garden rules, translated into Hindi",
+      "target": "hi",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "visitors are welcome", "language": "en", "translation": ["बगीचे", "बगीचा", "उद्यान", "बाग"] },
+        { "source": "dogs must be kept", "language": "en", "translation": ["कुत्त"] }
+      ]
+    },
+    {
+      "file": "es_emergency_dark.jpg",
+      "note": "White text on black, Spanish emergency exit",
+      "target": "en",
+      "scripts": ["latin"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "emergencia", "language": "es", "translation": ["emergency"] },
+        { "source": "mantenga esta puerta", "language": "es", "translation": ["door"] }
+      ]
+    },
+    {
+      "file": "hi_notice_dim.jpg",
+      "note": "Same library notice as hi_notice, in dim light",
+      "target": "en",
+      "scripts": ["latin", "devanagari"],
+      "sourceLanguages": null,
+      "expect": [
+        { "source": "रविवार", "language": "hi", "translation": ["sunday"] }
+      ]
+    }
+  ]
+}

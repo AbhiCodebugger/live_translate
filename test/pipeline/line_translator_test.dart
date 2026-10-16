@@ -579,6 +579,114 @@ void main() {
     });
   });
 
+  group('Devanagari fallback', () {
+    const mr = TranslateLanguage.marathi;
+    const caution = 'सावधान! आगे गहरा पानी है';
+    const parking = 'कृपया येथे वाहन उभे करू नये';
+
+    void identify(String text, List<LanguageGuess> guesses) =>
+        languages.guesses[text] = guesses;
+
+    test(
+      'a Hindi sign identified as Nepali is translated from Hindi',
+      () async {
+        models.present.add(hi);
+        identify(caution, const [
+          LanguageGuess('ne', 0.7),
+          LanguageGuess('hi', 0.2),
+        ]);
+        final result = await translate([caution]);
+        expect(result.single.sourceLanguage, 'hi');
+        expect(result.single.translatedText, '[en] $caution');
+      },
+    );
+
+    test('Marathi ranked above Hindi gives Marathi', () async {
+      identify(parking, const [
+        LanguageGuess('ne', 0.6),
+        LanguageGuess('mr', 0.3),
+        LanguageGuess('hi', 0.1),
+      ]);
+      final result = await translate([parking]);
+      expect(result.single.sourceLanguage, 'mr');
+    });
+
+    test('Nepali alone gives Hindi', () async {
+      identify(caution, const [LanguageGuess('ne', 0.9)]);
+      final result = await translate([caution]);
+      expect(result.single.sourceLanguage, 'hi');
+    });
+
+    test('a long line confirms Hindi and starts its download', () async {
+      models.downloadGate = Completer<void>();
+      const notice = 'पुस्तकालय रविवार को बंद रहेगा कृपया किताबें लौटाएँ';
+      identify(notice, const [
+        LanguageGuess('ne', 0.9),
+        LanguageGuess('hi', 0.05),
+      ]);
+      await translate([notice]);
+      await pumpEventQueue();
+      expect(models.downloads, [(hi, false)]);
+    });
+
+    test('a qualifying translatable guess is used as before', () async {
+      models.present.add(hi);
+      identify(caution, const [
+        LanguageGuess('ne', 0.6),
+        LanguageGuess('hi', 0.55),
+      ]);
+      final frame = await lineTranslator.translateFrame([
+        line(caution),
+      ], target: en);
+      expect(frame.lines.single.sourceLanguage, 'hi');
+      // Hindi qualifies on its own, so Nepali is outvoted, not replaced.
+      expect(frame.status, const SourceReady(hi));
+      expect(models.downloads, isEmpty);
+    });
+
+    test('Latin lines do not fall back', () async {
+      for (final text in ['Lorem ipsum', 'dolor sit', 'amet']) {
+        identifyAs(text, 'la');
+      }
+      final result = await translate(['Lorem ipsum', 'dolor sit', 'amet']);
+      expect(result.map((r) => r.sourceLanguage), ['la', 'la', 'la']);
+    });
+
+    test('an undetermined Devanagari line stays undetermined', () async {
+      identify(caution, const [
+        LanguageGuess('ne', 0.4),
+        LanguageGuess('hi', 0.3),
+      ]);
+      final result = await translate([caution]);
+      expect(result.single.sourceLanguage, isNull);
+    });
+
+    test('no fallback when the hint has no Devanagari language', () async {
+      identify(caution, const [LanguageGuess('ne', 0.9)]);
+      final result = await translate([caution], sourceLanguages: {es, fr});
+      expect(result.single.sourceLanguage, isNull);
+    });
+
+    test('a Hindi and Marathi hint falls back to Hindi', () async {
+      identify(caution, const [
+        LanguageGuess('ne', 0.9),
+        LanguageGuess('hi', 0.1),
+        LanguageGuess('mr', 0.05),
+      ]);
+      final result = await translate([caution], sourceLanguages: {hi, mr});
+      expect(result.single.sourceLanguage, 'hi');
+    });
+
+    test('a Marathi and Spanish hint falls back to Marathi', () async {
+      identify(caution, const [
+        LanguageGuess('ne', 0.9),
+        LanguageGuess('hi', 0.3),
+      ]);
+      final result = await translate([caution], sourceLanguages: {mr, es});
+      expect(result.single.sourceLanguage, 'mr');
+    });
+  });
+
   group('source status', () {
     Future<SourceStatus?> statusOf(
       List<String> texts, {
@@ -641,6 +749,23 @@ void main() {
         await statusOf(['Exit', 'Entrance', 'नमस्ते']),
         const SourceReady(hi),
       );
+    });
+
+    test('a Hindi sign identified as Nepali names Hindi, never "ne"', () async {
+      models.downloadGate = Completer<void>();
+      const caution = 'सावधान! आगे गहरा पानी है';
+      languages.guesses[caution] = const [
+        LanguageGuess('ne', 0.9),
+        LanguageGuess('hi', 0.1),
+      ];
+      final statuses = [
+        for (var i = 0; i < 3; i++) await statusOf([caution]),
+      ];
+      expect(statuses, [
+        const SourceGuessed(hi),
+        const SourceGuessed(hi),
+        const SourceDownloading(hi),
+      ]);
     });
 
     test('unsupported only once confirmed', () async {

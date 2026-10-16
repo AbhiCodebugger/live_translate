@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -138,6 +139,26 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('the shipped frames.json parses and names existing photos', () {
+      const folder = 'assets/replay_frames';
+      final manifest = ReplayManifest.parse(
+        File('$folder/frames.json').readAsStringSync(),
+      );
+      expect(manifest.frames, isNotEmpty);
+      for (final frame in manifest.frames) {
+        expect(
+          File('$folder/${frame.file}').existsSync(),
+          isTrue,
+          reason: frame.file,
+        );
+      }
+      final bytes = Directory(folder).listSync().whereType<File>().fold<int>(
+        0,
+        (sum, file) => sum + file.lengthSync(),
+      );
+      expect(bytes, lessThanOrEqualTo(3 * 1024 * 1024));
     });
 
     test('rejects an unknown script', () {

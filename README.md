@@ -383,7 +383,7 @@ Each label covers its paragraph in the page's colours. Its text starts at the or
 
 While the result is held, the labels move with the measured camera shift, and no more frames are read once the source language is settled. Until then, while the [source status](#following-language-detection) is searching or guessed, a steady picture is read again a second after each read, so a short sign confirms its language in a few seconds without moving the phone. A fast movement or a new scene fades the labels out, and the next steady picture is read again. Reads never queue, so the camera never falls behind.
 
-Paragraphs in the same script share one language per read, so a stray guess follows the rest of the page. Only languages ML Kit can translate take part in that vote when any paragraph has one, so a block of lorem ipsum identified as Latin doesn't drag a real heading along with it.
+Paragraphs in the same script share one language per read, so a stray guess follows the rest of the page. Only languages ML Kit can translate take part in that vote when any paragraph has one, so a block of lorem ipsum identified as Latin doesn't drag a real heading along with it. A Devanagari paragraph identified only as a language ML Kit can't translate, such as Nepali, is translated from Hindi or Marathi instead: whichever identification ranks higher, or Hindi. Short Hindi signs are often taken for Nepali.
 
 ## License
 

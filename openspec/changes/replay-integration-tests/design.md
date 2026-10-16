@@ -94,7 +94,7 @@ The test prints a table: frame, paragraphs, and cold/warm recognition, translati
 1. Decode it and apply the EXIF orientation (`bakeOrientation`).
 2. Clear all EXIF data, including location.
 3. Resize so the longer side is 1280 px.
-4. Encode it as JPEG at quality 80 into `assets/replay_frames/`.
+4. Encode it as JPEG at quality 75 into `assets/replay_frames/`. Quality 80 put the first 14 photos, taken of a screen, over 3 MB; 75 keeps the text sharp.
 5. Print the size, and warn if a file is over 300 KB or the folder is over 3 MB.
 
 The package itself gains no dependency.

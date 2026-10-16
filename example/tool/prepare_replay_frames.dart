@@ -78,7 +78,7 @@ List<int> prepare(img.Image image) {
         : img.copyResize(upright, height: maxSide);
   }
   upright.exif = img.ExifData();
-  return img.encodeJpg(upright, quality: 80);
+  return img.encodeJpg(upright, quality: 75);
 }
 
 /// The frame name for the photo at [path].

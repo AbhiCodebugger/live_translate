@@ -18,7 +18,7 @@
 ## 2. Frame preparation
 
 - [x] 2.1 Add `example/tool/prepare_replay_frames.dart` (design D6). Verify by running it on a test photo with EXIF orientation and GPS data, made in the scratchpad with `package:image`. The output must be upright, at most 1280 px on its longer side, and have empty EXIF. The script must warn about a file over 300 KB.
-- [ ] 2.2 **Needs the user's photos.** The user puts about 15 photos (design D8) in a folder and shares the path. Run the script on them into `example/assets/replay_frames/`. Draft `frames.json` by viewing each prepared photo: 1–3 expectations per frame with short distinctive fragments. Declare the folder under `flutter: assets` in `example/pubspec.yaml`. Verify that the folder totals at most 3 MB, that `ReplayManifest.parse` accepts `frames.json` (a host test loads the real file), and that every `file` exists.
+- [x] 2.2 **Needs the user's photos.** The user puts about 15 photos (design D8) in a folder and shares the path. Run the script on them into `example/assets/replay_frames/`. Draft `frames.json` by viewing each prepared photo: 1–3 expectations per frame with short distinctive fragments. Declare the folder under `flutter: assets` in `example/pubspec.yaml`. Verify that the folder totals at most 3 MB, that `ReplayManifest.parse` accepts `frames.json` (a host test loads the real file), and that every `file` exists.
 
 ## 3. Integration test
 
@@ -35,7 +35,7 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run `dart format --set-exit-if-changed .`, `flutter analyze` and `flutter test` at the package root and in `example/`, and `flutter pub publish --dry-run` at the root. The package must still validate and stay well under pub's size limit, with the frames included. Verify that all pass.
+- [x] 5.1 Run `dart format --set-exit-if-changed .`, `flutter analyze` and `flutter test` at the package root and in `example/`, and `flutter pub publish --dry-run` at the root. The package must still validate and stay well under pub's size limit, with the frames included. Verify that all pass.
 
 ## Workflow follow-up
 

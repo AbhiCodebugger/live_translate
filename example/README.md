@@ -51,6 +51,8 @@ flutter drive --profile \
    dart run tool/prepare_replay_frames.dart ~/Photos/station_sign.jpg
    ```
 
+   The script reads JPEG and PNG, not HEIC. Convert an iPhone photo first, at full size: `sips -s format jpeg IMG_1234.HEIC --out station_sign.jpg`.
+
 3. Describe it in `assets/replay_frames/frames.json`:
 
    ```json
