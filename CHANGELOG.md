@@ -1,30 +1,34 @@
-## Unreleased
+## 0.2.0
 
-**Breaking:** the API is renamed before 1.0 to say what it holds. Rename:
+**Breaking:** two names from 0.1.0 are renamed before 1.0 to say what they hold. Each item is a paragraph of text, not a single line:
 
-| Before | After |
+| 0.1.0 | 0.2.0 |
 |---|---|
 | `TranslatedLine` | `TranslatedParagraph` |
 | `LiveTranslateController.lines` | `LiveTranslateController.paragraphs` |
-| `LiveTranslateView.onLinesChanged` | `LiveTranslateView.onParagraphsChanged` |
-| `OverlayBuilder`'s `lines` parameter | `paragraphs` |
 
-The fields of `TranslatedParagraph` are unchanged, and `onFrozen` keeps its name.
+The fields of `TranslatedParagraph` are unchanged.
 
-* Paragraph ids now stay the same while the view keeps reading a paragraph in the same place: re-reads while the language settles, after a download or a target change, after a small pan, and on freeze. A new scene gets new ids.
-* `LiveTranslateController.setSourceLanguages`: change the expected source languages, or go back to detection with `null`, without restarting the camera. The most recent change wins, whether from the controller or the widget.
-* `OverlayStyle.maxFontSize` now caps a label's starting size (default 28). Large headings that used to get labels as big as the heading now stop at 28; raise `maxFontSize` to get them back.
+**Breaking:** `OverlayStyle.maxFontSize` (default 28) now caps a label's starting size. Large headings that used to get labels as big as the heading now stop at 28; raise `maxFontSize` to get them back.
 
-* `LiveTranslateView.overlayBuilder`: draw the translations yourself. The new `OverlayBuilder` receives the shown lines, in the view's coordinates, and replaces the built-in labels.
-* `LiveTranslateView.onLinesChanged`: called whenever the shown lines change, with or without a controller.
-* `LiveTranslateView.onFrozen`: called with the frozen picture's lines once its translation is shown, and again if it is read again.
+New:
+
+* `LiveTranslateView.overlayBuilder`: draw the translations yourself. The `OverlayBuilder` receives the shown paragraphs, in the view's coordinates, and replaces the built-in labels.
+* `LiveTranslateView.onParagraphsChanged`: called whenever the shown paragraphs change, with or without a controller.
+* `LiveTranslateView.onFrozen`: called with the frozen picture's paragraphs once its translation is shown, and again if it is read again.
 * `LiveTranslateView.placeholderBuilder`: shown while the camera starts, in place of the progress indicator.
+* `SourceStatus` and `LiveTranslateController.sourceStatus`: where finding the source language stands (searching, guessed, downloading, ready, unsupported, not found or download failed), to show progress before the first translation.
+* `LiveTranslateController.setSourceLanguages`: change the expected source languages, or go back to detection with `null`, without restarting the camera. The most recent change wins, whether from the controller or the widget.
 * `PipelineMetrics` and `LiveTranslateController.metrics`: how long each shown read took (recognition, translation, colour sampling and total), how many paragraphs it translated, and whether it was frozen.
 * `LiveTranslateView.showDebugHud`: a small panel over the camera with the latest read's timings and the frame rate, for development.
-* `SourceStatus` and `LiveTranslateController.sourceStatus`: where finding the source language stands (searching, guessed, downloading, ready, unsupported, not found or download failed), to show progress before the first translation.
-* A steady picture whose language isn't settled is read again every second, so short text confirms its language without moving the phone. After three reads that find no language, the status says so.
+
+Improved:
+
+* Faster first translation: a steady picture whose language isn't settled is read again every second, so short text confirms its language without moving the phone. After three reads that find no language, the status says so.
+* Paragraph ids now stay the same while the view keeps reading a paragraph in the same place: re-reads while the language settles, after a download or a target change, after a small pan, and on freeze. A new scene gets new ids, so an id can key a widget.
 * Languages that can't be translated, such as lorem ipsum identified as Latin, no longer outvote a translatable language in the same script.
 * A Devanagari paragraph identified only as a language ML Kit can't translate, such as a Hindi sign taken for Nepali, is now translated from Hindi or Marathi instead of being left untranslated. Before, a short Hindi sign could show nothing at all.
+* The example app adds model management, a sheet to copy the read text, the source status on its language chip, and replay tests that run saved photos through the real pipeline on a device.
 
 ## 0.1.0
 
