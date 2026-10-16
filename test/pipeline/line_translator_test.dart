@@ -7,6 +7,7 @@ import 'package:google_mlkit_translation/google_mlkit_translation.dart'
 import 'package:live_translate/src/engines/language_engine.dart';
 import 'package:live_translate/src/engines/text_engine.dart';
 import 'package:live_translate/src/errors.dart';
+import 'package:live_translate/src/models/source_status.dart';
 import 'package:live_translate/src/pipeline/line_translator.dart';
 
 import '../support/fakes.dart';
@@ -472,6 +473,47 @@ void main() {
       final result = await translate(['नमस्ते', 'Salida']);
       expect(result.map((r) => r.sourceLanguage), ['hi', 'es']);
     });
+
+    test('lorem ipsum beside a Spanish heading', () async {
+      identifyAs('Qué es Lorem Ipsum', 'es', 0.9);
+      for (final text in ['Lorem ipsum', 'dolor sit', 'amet', 'elit sed']) {
+        identifyAs(text, 'la', 0.8);
+      }
+      final result = await translate([
+        'Qué es Lorem Ipsum',
+        'Lorem ipsum',
+        'dolor sit',
+        'amet',
+        'elit sed',
+      ]);
+      expect(result.map((r) => r.sourceLanguage), [
+        'es',
+        'la',
+        'la',
+        'la',
+        'la',
+      ]);
+      expect(result.first.translatedText, '[en] Qué es Lorem Ipsum');
+    });
+
+    test('only untranslatable guesses still share one language', () async {
+      for (final text in ['Lorem ipsum', 'dolor sit', 'amet']) {
+        identifyAs(text, 'la');
+      }
+      final result = await translate(['Lorem ipsum', 'dolor sit', 'amet']);
+      expect(result.map((r) => r.sourceLanguage), ['la', 'la', 'la']);
+    });
+
+    test('lorem ipsum does not hold back a Spanish download', () async {
+      models.present.remove(es);
+      models.downloadGate = Completer<void>();
+      identifyAs('Salida', 'es', 0.9);
+      identifyAs('Lorem ipsum', 'la', 0.9);
+      for (var i = 0; i < 3; i++) {
+        await translate(['Salida', 'Lorem ipsum']);
+      }
+      expect(models.downloads, [(es, false)]);
+    });
   });
 
   group('detect-language spec', () {
@@ -534,6 +576,151 @@ void main() {
       final result = await translate(['Exit', 'Salida']);
       expect(result.map((t) => t.line.text), ['Salida']);
       expect(translator.translated, ['Salida']);
+    });
+  });
+
+  group('source status', () {
+    Future<SourceStatus?> statusOf(
+      List<String> texts, {
+      TranslateLanguage target = en,
+      Set<TranslateLanguage>? sourceLanguages,
+      String? current,
+    }) async => (await lineTranslator.translateFrame(
+      [for (final text in texts) line(text)],
+      target: target,
+      sourceLanguages: sourceLanguages,
+      current: current,
+    )).status;
+
+    test('no language gives no status', () async {
+      expect(await statusOf(['OK']), isNull);
+      expect(await statusOf([]), isNull);
+    });
+
+    test('guessed before confirmation', () async {
+      models.present.remove(es);
+      identifyAs('Salida', 'es');
+      expect(await statusOf(['Salida']), const SourceGuessed(es));
+      expect(models.downloads, isEmpty);
+    });
+
+    test('downloading once confirmed', () async {
+      models.present.remove(es);
+      models.downloadGate = Completer<void>();
+      identifyAs('Salida', 'es');
+      await statusOf(['Salida']);
+      await statusOf(['Salida']);
+      expect(await statusOf(['Salida']), const SourceDownloading(es));
+    });
+
+    test('a long paragraph downloads after one read', () async {
+      models.present.remove(fr);
+      models.downloadGate = Completer<void>();
+      const text = 'Il était une fois une princesse très gentille';
+      identifyAs(text, 'fr', 0.95);
+      expect(await statusOf([text]), const SourceDownloading(fr));
+    });
+
+    test('ready when the model is present', () async {
+      identifyAs('Salida', 'es');
+      expect(await statusOf(['Salida']), const SourceReady(es));
+    });
+
+    test('ready for the target when every line is in it', () async {
+      identifyAs('Exit', 'en');
+      identifyAs('Entrance', 'en');
+      expect(await statusOf(['Exit', 'Entrance']), const SourceReady(en));
+    });
+
+    test('lines in the target language are not counted', () async {
+      identifyAs('Exit', 'en');
+      identifyAs('Entrance', 'en');
+      identifyAs('नमस्ते', 'hi');
+      models.present.add(hi);
+      expect(
+        await statusOf(['Exit', 'Entrance', 'नमस्ते']),
+        const SourceReady(hi),
+      );
+    });
+
+    test('unsupported only once confirmed', () async {
+      identifyAs('Lorem ipsum', 'la');
+      expect(await statusOf(['Lorem ipsum']), const SourceSearching());
+      expect(await statusOf(['Lorem ipsum']), const SourceSearching());
+      expect(await statusOf(['Lorem ipsum']), const SourceUnsupported('la'));
+    });
+
+    test('download failed, then downloading on the retry', () async {
+      models.present.remove(es);
+      final first = models.downloadGate = Completer<void>();
+      identifyAs('Salida', 'es');
+      for (var i = 0; i < 3; i++) {
+        await statusOf(['Salida']);
+      }
+      first.completeError(const ModelNotDownloaded(es));
+      await pumpEventQueue();
+      models.downloadGate = Completer<void>();
+      // The missing model is checked again after confirmWindow frames.
+      SourceStatus? status;
+      for (var i = 0; i < LineTranslator.confirmWindow; i++) {
+        status = await statusOf(['Salida']);
+        if (status is SourceDownloading) break;
+        expect(status, const SourceDownloadFailed(es));
+      }
+      expect(status, const SourceDownloading(es));
+    });
+
+    test('names the language of the most lines', () async {
+      models.present.add(hi);
+      for (final text in ['नमस्ते', 'धन्यवाद', 'नमस्कार']) {
+        identifyAs(text, 'hi');
+      }
+      identifyAs('Salida', 'es');
+      expect(
+        await statusOf(['नमस्ते', 'धन्यवाद', 'नमस्कार', 'Salida']),
+        const SourceReady(hi),
+      );
+    });
+
+    test('a tie keeps the current language', () async {
+      models.present.add(hi);
+      identifyAs('नमस्ते', 'hi');
+      identifyAs('Salida', 'es');
+      expect(
+        await statusOf(['नमस्ते', 'Salida'], current: 'es'),
+        const SourceReady(es),
+      );
+      expect(await statusOf(['नमस्ते', 'Salida']), const SourceReady(hi));
+    });
+
+    test('a single hinted language uses the same stages', () async {
+      models.downloadGate = Completer<void>();
+      expect(
+        await statusOf(['नमस्ते'], sourceLanguages: {hi}),
+        const SourceGuessed(hi),
+      );
+      await statusOf(['नमस्ते'], sourceLanguages: {hi});
+      expect(
+        await statusOf(['नमस्ते'], sourceLanguages: {hi}),
+        const SourceDownloading(hi),
+      );
+    });
+
+    test('download events are reported', () async {
+      final events = <({TranslateLanguage language, ModelEvent event})>[];
+      lineTranslator.modelEvents.listen(events.add);
+      models.present.remove(es);
+      final gate = models.downloadGate = Completer<void>();
+      identifyAs('Salida', 'es');
+      for (var i = 0; i < 3; i++) {
+        await statusOf(['Salida']);
+      }
+      gate.complete();
+      await pumpEventQueue();
+      expect(events, [
+        (language: es, event: ModelEvent.started),
+        (language: es, event: ModelEvent.ready),
+      ]);
     });
   });
 

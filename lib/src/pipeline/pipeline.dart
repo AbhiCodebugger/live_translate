@@ -38,6 +38,9 @@ final class Pipeline {
   }) : _engine = textEngine,
        _now = now ?? DateTime.now {
     _translator = createTranslator(_report, _modelReady)..prepare(target);
+    _translatorEvents = _translator.modelEvents.listen((event) {
+      if (!_disposed) _modelEvents.add(event);
+    });
   }
 
   /// The language text is translated into.
@@ -51,6 +54,11 @@ final class Pipeline {
   late final LineTranslator _translator;
   final _errors = StreamController<LiveTranslateException>.broadcast();
   final _modelsReady = StreamController<TranslateLanguage>.broadcast();
+  final _modelEvents =
+      StreamController<
+        ({TranslateLanguage language, ModelEvent event})
+      >.broadcast();
+  late final StreamSubscription<void> _translatorEvents;
   bool _disposed = false;
 
   /// Problems found while translating, such as a model starting to
@@ -60,12 +68,19 @@ final class Pipeline {
   /// Languages whose model the pipeline finished downloading.
   Stream<TranslateLanguage> get modelsReady => _modelsReady.stream;
 
+  /// Each automatic model download's start, completion and failure.
+  Stream<({TranslateLanguage language, ModelEvent event})> get modelEvents =>
+      _modelEvents.stream;
+
   /// Reads [frame] with every script and translates it paragraph by
   /// paragraph, sampling each paragraph's page colours.
   ///
   /// Failures are thrown rather than reported. Returns `null` for a frame in
   /// an unsupported format.
-  Future<ReadResult?> read(CameraFrame frame) async {
+  ///
+  /// [currentSource], the BCP-47 tag the source status names now, breaks a
+  /// tie between languages in the result's [ReadResult.sourceStatus].
+  Future<ReadResult?> read(CameraFrame frame, {String? currentSource}) async {
     final start = _now();
     final input = toInputImage(frame.image, frame.rotation);
     if (input == null) return null;
@@ -84,10 +99,11 @@ final class Pipeline {
           paragraph: id,
         ),
     ];
-    final translations = await _translator.translateLines(
+    final (lines: translations, :status) = await _translator.translateFrame(
       paragraphs,
       target: target,
       sourceLanguages: sourceLanguages,
+      current: currentSource,
     );
     final translated = _now();
     var sampling = Duration.zero;
@@ -108,6 +124,7 @@ final class Pipeline {
           },
       },
       paragraphs: shown,
+      sourceStatus: status,
       imageSize: frame.size,
       rotation: frame.rotation,
       timings: (
@@ -159,6 +176,11 @@ final class Pipeline {
   /// them.
   Future<void> dispose() async {
     _disposed = true;
-    await Future.wait([_errors.close(), _modelsReady.close()]);
+    await _translatorEvents.cancel();
+    await Future.wait([
+      _errors.close(),
+      _modelsReady.close(),
+      _modelEvents.close(),
+    ]);
   }
 }

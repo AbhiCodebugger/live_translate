@@ -14,6 +14,7 @@ import 'package:live_translate/src/engines/text_engine.dart';
 import 'package:live_translate/src/errors.dart';
 import 'package:live_translate/src/geometry/image_rotation.dart';
 import 'package:live_translate/src/models/overlay_style.dart';
+import 'package:live_translate/src/models/source_status.dart';
 import 'package:live_translate/src/models/text_script.dart';
 import 'package:live_translate/src/models/translated_line.dart';
 import 'package:live_translate/src/pipeline/pipeline_metrics.dart';
@@ -568,6 +569,190 @@ void main() {
         await deliver(tester, generation: session.generation - 1);
       }
       expect(engines.reads, 0);
+    });
+  });
+
+  group('source status', () {
+    late LiveTranslateController controller;
+
+    setUp(() => controller = LiveTranslateController());
+    tearDown(() => controller.dispose());
+
+    Future<void> pumpControlled(
+      WidgetTester tester, {
+      Set<TranslateLanguage>? sourceLanguages,
+    }) => pumpView(
+      tester,
+      app(controller: controller, sourceLanguages: sourceLanguages),
+    );
+
+    /// Holds still for [duration] after a settle, letting re-reads finish.
+    Future<void> holdStill(WidgetTester tester, Duration duration) async {
+      for (var t = 0; t < duration.inMilliseconds; t += 33) {
+        await deliver(tester);
+      }
+      await tester.pump();
+    }
+
+    testWidgets('searching before anything is read', (tester) async {
+      await pumpControlled(tester);
+      expect(controller.sourceStatus, const SourceSearching());
+    });
+
+    testWidgets('ready once a read finds a language with its model', (
+      tester,
+    ) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      expect(
+        controller.sourceStatus,
+        const SourceReady(TranslateLanguage.spanish),
+      );
+      await holdStill(tester, const Duration(seconds: 3));
+      expect(engines.reads, 1);
+    });
+
+    testWidgets('a short sign held still confirms and downloads', (
+      tester,
+    ) async {
+      engines.models.present.remove(TranslateLanguage.spanish);
+      engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      expect(engines.reads, 1);
+      expect(
+        controller.sourceStatus,
+        const SourceGuessed(TranslateLanguage.spanish),
+      );
+      expect(engines.models.downloads, isEmpty);
+
+      await holdStill(tester, const Duration(milliseconds: 2400));
+      expect(engines.reads, 3);
+      expect(engines.models.downloads.map((d) => d.$1), [
+        TranslateLanguage.spanish,
+      ]);
+      expect(
+        controller.sourceStatus,
+        const SourceDownloading(TranslateLanguage.spanish),
+      );
+
+      // Downloading is settled: no more reads while it runs.
+      await holdStill(tester, const Duration(seconds: 3));
+      expect(engines.reads, 3);
+
+      engines.models.downloadGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(
+        controller.sourceStatus,
+        const SourceReady(TranslateLanguage.spanish),
+      );
+      expect(labels(tester).single.text, '[en] Salida');
+    });
+
+    testWidgets('nothing readable is not found after three reads', (
+      tester,
+    ) async {
+      engines.lines = const [];
+      await pumpControlled(tester);
+      await settle(tester);
+      expect(controller.sourceStatus, const SourceSearching());
+      await holdStill(tester, const Duration(milliseconds: 2400));
+      expect(engines.reads, 3);
+      expect(controller.sourceStatus, const SourceNotFound());
+
+      await holdStill(tester, const Duration(seconds: 3));
+      expect(engines.reads, 3);
+    });
+
+    testWidgets('a language found after not found is named', (tester) async {
+      engines.lines = const [];
+      await pumpControlled(tester);
+      await settle(tester);
+      await holdStill(tester, const Duration(milliseconds: 2400));
+      expect(controller.sourceStatus, const SourceNotFound());
+
+      engines.lines = [_line('Salida')];
+      await settle(tester, seed: 2);
+      expect(
+        controller.sourceStatus,
+        const SourceReady(TranslateLanguage.spanish),
+      );
+    });
+
+    testWidgets('a new scene starts searching again', (tester) async {
+      engines.lines = [_line('Salida')];
+      await pumpControlled(tester);
+      await settle(tester);
+      engines.lines = const [];
+      await deliver(tester, seed: 2);
+      expect(controller.sourceStatus, const SourceSearching());
+    });
+
+    testWidgets('a failed download shows download failed', (tester) async {
+      engines.models.present.remove(TranslateLanguage.hindi);
+      final gate = engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line(_hindi)];
+      await pumpControlled(tester);
+      await settle(tester);
+      expect(
+        controller.sourceStatus,
+        const SourceDownloading(TranslateLanguage.hindi),
+      );
+
+      gate.completeError(const ModelNotDownloaded(TranslateLanguage.hindi));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        controller.sourceStatus,
+        const SourceDownloadFailed(TranslateLanguage.hindi),
+      );
+    });
+
+    testWidgets('a chosen source uses the same stages', (tester) async {
+      engines.models.present.remove(TranslateLanguage.hindi);
+      engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line('नमस्ते')];
+      await pumpControlled(tester, sourceLanguages: {TranslateLanguage.hindi});
+      await settle(tester);
+      expect(
+        controller.sourceStatus,
+        const SourceGuessed(TranslateLanguage.hindi),
+      );
+      await holdStill(tester, const Duration(milliseconds: 2400));
+      expect(
+        controller.sourceStatus,
+        const SourceDownloading(TranslateLanguage.hindi),
+      );
+    });
+
+    testWidgets('a frozen re-read after a download is ready', (tester) async {
+      engines.models.present.remove(TranslateLanguage.hindi);
+      final gate = engines.models.downloadGate = Completer<void>();
+      engines.lines = [_line(_hindi)];
+      await pumpControlled(tester);
+      await settle(tester);
+      await controller.freeze();
+      await tester.pump();
+      await tester.pump();
+      expect(
+        controller.sourceStatus,
+        const SourceDownloading(TranslateLanguage.hindi),
+      );
+
+      gate.complete();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(controller.state, LiveTranslateState.frozen);
+      expect(
+        controller.sourceStatus,
+        const SourceReady(TranslateLanguage.hindi),
+      );
+      expect(labels(tester).single.text, '[en] $_hindi');
     });
   });
 

@@ -1,6 +1,8 @@
-import 'dart:ui' show Rect;
-
 import 'package:flutter_test/flutter_test.dart';
+// The plugin's BCP-47 lookup, which the package doesn't export.
+// ignore: depend_on_referenced_packages
+import 'package:google_mlkit_translation/google_mlkit_translation.dart'
+    show BCP47Code;
 import 'package:live_translate/live_translate.dart';
 import 'package:live_translate_example/languages.dart';
 
@@ -63,64 +65,39 @@ void main() {
     }
   });
 
-  group('detectedLanguage', () {
-    var id = 0;
-    TranslatedLine from(String? tag) => TranslatedLine(
-      id: '${id++}',
-      sourceText: 'text',
-      translatedText: 'translation',
-      sourceLanguage: tag,
-      rect: Rect.zero,
-    );
+  group('sourceStatusLabel', () {
+    const spanish = TranslateLanguage.spanish;
 
-    test('French lines give French', () {
+    test('names each stage', () {
+      expect(sourceStatusLabel(const SourceSearching()), 'Looking for text…');
+      expect(sourceStatusLabel(const SourceGuessed(spanish)), 'Spanish?');
+      expect(sourceStatusLabel(const SourceDownloading(spanish)), 'Spanish');
+      expect(sourceStatusLabel(const SourceReady(spanish)), 'Spanish');
       expect(
-        detectedLanguage([from('fr'), from('fr')], null),
-        TranslateLanguage.french,
+        sourceStatusLabel(const SourceUnsupported('la')),
+        "Latin can't be translated",
+      );
+      expect(
+        sourceStatusLabel(const SourceNotFound()),
+        'No supported text found',
+      );
+      expect(
+        sourceStatusLabel(const SourceDownloadFailed(spanish)),
+        'Spanish · download failed',
       );
     });
 
-    test('the most common language wins', () {
+    test('an unknown tag is shown as it is', () {
       expect(
-        detectedLanguage([
-          from('hi'),
-          from('en'),
-          from('hi'),
-          from('hi'),
-        ], null),
-        TranslateLanguage.hindi,
+        sourceStatusLabel(const SourceUnsupported('xx')),
+        "xx can't be translated",
       );
     });
+  });
 
-    test('a tie keeps the current language', () {
-      expect(
-        detectedLanguage([from('fr'), from('es')], TranslateLanguage.spanish),
-        TranslateLanguage.spanish,
-      );
-    });
-
-    test('otherwise a tie takes the first in line order', () {
-      expect(
-        detectedLanguage([from('fr'), from('es')], TranslateLanguage.german),
-        TranslateLanguage.french,
-      );
-    });
-
-    test('unknown and missing tags are skipped', () {
-      expect(
-        detectedLanguage([
-          from('la'),
-          from(null),
-          from('la'),
-          from('de'),
-        ], null),
-        TranslateLanguage.german,
-      );
-    });
-
-    test('no lines give nothing', () {
-      expect(detectedLanguage(const [], TranslateLanguage.french), isNull);
-      expect(detectedLanguage([from(null)], null), isNull);
-    });
+  test('untranslatable names are for languages ML Kit cannot translate', () {
+    for (final tag in untranslatableNames.keys) {
+      expect(BCP47Code.fromRawValue(tag), isNull, reason: tag);
+    }
   });
 }

@@ -17,7 +17,7 @@ const LiveTranslateView();
 - **Latin and Devanagari.** English, Spanish, French, German and the other Latin-script languages, plus Hindi and Marathi, are read at the same time.
 - **Automatic languages.** Each paragraph's language is detected, and the models it needs download on their own. The target defaults to the phone's language.
 - **Freeze.** Pause on the current picture to read the translation at leisure.
-- **Programmatic control.** An optional `LiveTranslateController` reports state and lines, and changes the language, scripts and torch without restarting the camera.
+- **Programmatic control.** An optional `LiveTranslateController` reports state, lines and how far language detection has got, and changes the language, scripts and torch without restarting the camera.
 - **Your own look.** Draw the translations yourself with `overlayBuilder`, and show your own screen while the camera starts with `placeholderBuilder`.
 - **Measurable.** `controller.metrics` reports how long each read took, stage by stage, and `showDebugHud` shows the numbers over the camera.
 
@@ -222,6 +222,36 @@ LiveTranslateView(
 );
 ```
 
+### Following language detection
+
+Before the first paragraph is translated, the view has to find the source language, confirm it and, the first time, download its model. `controller.sourceStatus` tells you which stage it has reached, so you can show progress instead of an endless "detecting". `SourceStatus` is a sealed class:
+
+```dart
+final controller = LiveTranslateController();
+
+String sourceLabel() => switch (controller.sourceStatus) {
+  SourceSearching() => 'Looking for text…',
+  SourceGuessed(:final language) => '${language.name}?',
+  SourceDownloading(:final language) => 'Downloading ${language.name}…',
+  SourceReady(:final language) => language.name,
+  SourceUnsupported(:final tag) => "'$tag' can't be translated",
+  SourceNotFound() => 'No supported text found',
+  SourceDownloadFailed(:final language) =>
+    "${language.name} didn't download",
+};
+```
+
+Listeners are notified when it changes, so rebuild with a `ListenableBuilder`.
+
+- **Searching:** nothing in the current scene has a language yet.
+- **Guessed:** text looks like this language, but it isn't confirmed yet, so its model doesn't download. Long text confirms after one read. A short sign confirms after three; while you hold still, the view reads again every second until it does.
+- **Downloading** and **Ready:** the model is downloading, or is on the device and paragraphs are translated. ML Kit doesn't report download progress, so there is no percentage. When the page is already in the target language, the status is ready with the target.
+- **Unsupported:** the text is confirmed as a language ML Kit can't translate, such as Latin.
+- **Not found:** three reads of a steady picture found no language: no text, a script the view doesn't read (such as Cyrillic), or text that can't be identified.
+- **Download failed:** the next read retries it.
+
+With several languages in view, the status names the language of the most paragraphs. A new scene or a settings change starts searching again. A controller that isn't attached reports searching.
+
 ### Managing models from your own UI
 
 The view downloads the models it needs by itself. To prepare them ahead of time, or to free space:
@@ -299,7 +329,7 @@ LiveTranslateView(
 
 The [example app](example/) is a Google Lens-style camera screen built only on the public API:
 
-- **Language pill.** Pick the language to translate from and to. "Detect language" names the language it found. The source choice also decides which scripts are read: "Detect language" reads Latin and Devanagari, Hindi and Marathi read Devanagari, and every other language reads Latin.
+- **Language pill.** Pick the language to translate from and to. "Detect language" shows the [source status](#following-language-detection) on its chip: "Looking for text…", "Spanish?", "Spanish" with a spinner while downloading, "No supported text found" and so on. The source choice also decides which scripts are read: "Detect language" reads Latin and Devanagari, Hindi and Marathi read Devanagari, and every other language reads Latin.
 - **Shutter.** Freeze and resume. Once the frozen picture is translated, a **Text** button opens a sheet with each paragraph's translation and original, to copy one or all of them.
 - **Torch** toggle.
 - **Menu:**
@@ -316,6 +346,8 @@ flutter run
 
 Use `flutter run --profile` when reading the HUD's timings.
 
+The example also holds replay tests, which run saved photos of real signs and pages through ML Kit on a device. See its [README](example/README.md#replay-tests).
+
 ## Scripts and languages
 
 - **Read:** Latin and Devanagari text, both by default.
@@ -324,7 +356,7 @@ Use `flutter run --profile` when reading the HUD's timings.
 
 **Model downloads:** each language's translation model is about 30 MB, and downloads once, on any network.
 - The target language's model downloads as soon as the view starts.
-- A detected language's model downloads once that language is confirmed: straight away for a paragraph of 20 letters or more, or after the language has been seen in a few reads.
+- A detected language's model downloads once that language is confirmed: straight away for a paragraph of 20 letters or more, or after the language has been seen in three reads, which a steady picture makes within a few seconds.
 - Until a model arrives, its paragraphs are left untranslated. They appear as soon as it's ready, without moving the camera.
 
 ## Limitations
@@ -344,7 +376,9 @@ Every camera frame is used only to measure how the picture moves, from a small b
 3. Each paragraph's language is detected and the paragraph is translated, with a cache.
 4. The page's colours are sampled behind each paragraph.
 
-While the result is held, no more frames are read, and the labels move with the measured camera shift. A fast movement or a new scene fades them out, and the next steady picture is read again. Reads never queue, so the camera never falls behind.
+While the result is held, the labels move with the measured camera shift, and no more frames are read once the source language is settled. Until then, while the [source status](#following-language-detection) is searching or guessed, a steady picture is read again a second after each read, so a short sign confirms its language in a few seconds without moving the phone. A fast movement or a new scene fades the labels out, and the next steady picture is read again. Reads never queue, so the camera never falls behind.
+
+Paragraphs in the same script share one language per read, so a stray guess follows the rest of the page. Only languages ML Kit can translate take part in that vote when any paragraph has one, so a block of lorem ipsum identified as Latin doesn't drag a real heading along with it.
 
 ## License
 

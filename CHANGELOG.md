@@ -6,6 +6,9 @@
 * `LiveTranslateView.placeholderBuilder`: shown while the camera starts, in place of the progress indicator.
 * `PipelineMetrics` and `LiveTranslateController.metrics`: how long each shown read took (recognition, translation, colour sampling and total), how many paragraphs it translated, and whether it was frozen.
 * `LiveTranslateView.showDebugHud`: a small panel over the camera with the latest read's timings and the frame rate, for development.
+* `SourceStatus` and `LiveTranslateController.sourceStatus`: where finding the source language stands (searching, guessed, downloading, ready, unsupported, not found or download failed), to show progress before the first translation.
+* A steady picture whose language isn't settled is read again every second, so short text confirms its language without moving the phone. After three reads that find no language, the status says so.
+* Languages that can't be translated, such as lorem ipsum identified as Latin, no longer outvote a translatable language in the same script.
 
 ## 0.1.0
 

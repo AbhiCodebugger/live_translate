@@ -27,6 +27,7 @@ import '../geometry/coordinate_mapper.dart';
 import '../geometry/image_rotation.dart';
 import '../models/device_language.dart';
 import '../models/overlay_style.dart';
+import '../models/source_status.dart';
 import '../models/text_script.dart';
 import '../models/translated_line.dart';
 import '../pipeline/line_translator.dart';
@@ -274,6 +275,11 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   // called with it yet.
   bool _frozenPending = false;
 
+  // Where finding the source language stands, and how many reads of the
+  // current scene in a row found no language.
+  SourceStatus _sourceStatus = const SourceSearching();
+  int _readsWithoutLanguage = 0;
+
   // The latest shown read's metrics, and whether the controller still has
   // to hear about them.
   PipelineMetrics? _latestMetrics;
@@ -415,6 +421,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       case SettleAction.clear:
         _readToken++;
         _reading = false;
+        _resetSourceStatus();
         if (_shown != null) unawaited(_fade.animateTo(0));
       case SettleAction.none:
         break;
@@ -444,7 +451,10 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     setState(() => _reading = true);
     final ReadResult? result;
     try {
-      result = await _pipeline.read(frame);
+      result = await _pipeline.read(
+        frame,
+        currentSource: _namedTag(_sourceStatus),
+      );
     } catch (error, stackTrace) {
       // A superseded read may fail because its engines were closed.
       if (!mounted || token != _readToken) return;
@@ -463,6 +473,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       _reading = false;
       if (_frozen) _frozenPending = true;
       if (result == null) return;
+      _takeSourceStatus(result.sourceStatus);
       final timings = result.timings;
       _latestMetrics = _pendingMetrics = PipelineMetrics(
         recognition: timings.recognition,
@@ -482,6 +493,53 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       _readyDuringRead.clear();
       _reread();
     }
+  }
+
+  /// Moves the source status on from a read's [status], `null` when the read
+  /// found no language: after three such reads in a row, nothing is found.
+  void _takeSourceStatus(SourceStatus? status) {
+    if (status == null) {
+      _readsWithoutLanguage++;
+      _setSourceStatus(
+        _readsWithoutLanguage >= _readsBeforeNotFound ||
+                _sourceStatus is SourceNotFound
+            ? const SourceNotFound()
+            : const SourceSearching(),
+      );
+    } else {
+      _readsWithoutLanguage = 0;
+      _setSourceStatus(status);
+    }
+  }
+
+  /// Starts looking for the source language again, as for a new scene.
+  void _resetSourceStatus() {
+    _readsWithoutLanguage = 0;
+    _setSourceStatus(const SourceSearching());
+  }
+
+  /// Shows [status], and keeps reading a steady picture while it is still
+  /// searching or guessing.
+  void _setSourceStatus(SourceStatus status) {
+    _settler.unsettled = status is SourceSearching || status is SourceGuessed;
+    if (status == _sourceStatus) return;
+    _sourceStatus = status;
+    _scheduleReport();
+    // The report goes out after a frame, which a model event alone
+    // doesn't bring.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// Moves the status on as soon as the named language's download starts,
+  /// completes or fails, without waiting for the next read.
+  void _onModelEvent(({TranslateLanguage language, ModelEvent event}) event) {
+    if (_namedTag(_sourceStatus) != event.language.bcpCode) return;
+    if (_sourceStatus is SourceReady) return;
+    _setSourceStatus(switch (event.event) {
+      ModelEvent.started => SourceDownloading(event.language),
+      ModelEvent.ready => SourceReady(event.language),
+      ModelEvent.failed => SourceDownloadFailed(event.language),
+    });
   }
 
   /// Reads the shown result's frame again, as after a settings change or a
@@ -580,6 +638,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _readToken++;
     _settler.reset();
     _estimator.reset();
+    _resetSourceStatus();
     LiveTranslateException? failure;
     try {
       await _session.resume();
@@ -625,6 +684,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   void _replacePipeline() {
     unawaited(_tearDownPipeline());
     _buildPipeline();
+    _resetSourceStatus();
     // Results of reads from before the change are discarded; a shown result
     // is read again with the new settings.
     _readToken++;
@@ -660,6 +720,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _subscriptions.addAll([
       _pipeline.errors.listen(_report),
       _pipeline.modelsReady.listen(_onModelReady),
+      _pipeline.modelEvents.listen(_onModelEvent),
     ]);
   }
 
@@ -692,6 +753,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _reading = false;
     _frozen = false;
     _frozenPending = false;
+    _resetSourceStatus();
   }
 
   Future<void> _start() async {
@@ -750,6 +812,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
           state: _state,
           lines: lines,
           target: _target,
+          sourceStatus: _sourceStatus,
         );
         if (_pendingMetrics case final metrics?) {
           publishMetrics(controller, metrics);
@@ -868,3 +931,17 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     return sorted[sorted.length ~/ 2];
   }
 }
+
+/// How many reads of a scene in a row must find no language before the
+/// source status says nothing was found.
+const _readsBeforeNotFound = 3;
+
+/// The BCP-47 tag of the language [status] names, if any.
+String? _namedTag(SourceStatus status) => switch (status) {
+  SourceSearching() || SourceNotFound() => null,
+  SourceGuessed(:final language) ||
+  SourceDownloading(:final language) ||
+  SourceReady(:final language) ||
+  SourceDownloadFailed(:final language) => language.bcpCode,
+  SourceUnsupported(:final tag) => tag,
+};

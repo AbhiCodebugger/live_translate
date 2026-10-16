@@ -9,6 +9,7 @@ import 'package:live_translate/src/engines/language_engine.dart';
 import 'package:live_translate/src/engines/text_engine.dart';
 import 'package:live_translate/src/errors.dart';
 import 'package:live_translate/src/geometry/image_rotation.dart';
+import 'package:live_translate/src/models/source_status.dart';
 import 'package:live_translate/src/pipeline/line_translator.dart';
 import 'package:live_translate/src/pipeline/pipeline.dart';
 
@@ -94,6 +95,44 @@ void main() {
     }
     await pumpEventQueue();
     expect(models.downloads.map((d) => d.$1), [TranslateLanguage.hindi]);
+  });
+
+  test('a read carries its source status', () async {
+    text.lines = [line('Salida')];
+    final result = (await pipeline.read(frame()))!;
+    expect(result.sourceStatus, const SourceReady(TranslateLanguage.spanish));
+
+    text.lines = [line('OK')];
+    expect((await pipeline.read(frame()))!.sourceStatus, isNull);
+  });
+
+  test('download start, completion and failure are emitted', () async {
+    final events = <({TranslateLanguage language, ModelEvent event})>[];
+    pipeline.modelEvents.listen(events.add);
+    final first = models.downloadGate = Completer<void>();
+    text.lines = [line('नमस्ते')];
+    for (var i = 0; i < 3; i++) {
+      await pipeline.read(frame());
+    }
+    first.completeError(const ModelNotDownloaded(TranslateLanguage.hindi));
+    await pumpEventQueue();
+    expect(events, [
+      (language: TranslateLanguage.hindi, event: ModelEvent.started),
+      (language: TranslateLanguage.hindi, event: ModelEvent.failed),
+    ]);
+    // The next read retries the download.
+    events.clear();
+    final retry = models.downloadGate = Completer<void>();
+    expect(
+      (await pipeline.read(frame()))!.sourceStatus,
+      const SourceDownloading(TranslateLanguage.hindi),
+    );
+    retry.complete();
+    await pumpEventQueue();
+    expect(events, [
+      (language: TranslateLanguage.hindi, event: ModelEvent.started),
+      (language: TranslateLanguage.hindi, event: ModelEvent.ready),
+    ]);
   });
 
   test('a paragraph waiting for the target model lists the target', () async {

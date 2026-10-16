@@ -112,26 +112,66 @@ String displayName(TranslateLanguage language) => switch (language) {
   _ => (sourceLanguages: {source}, scripts: const {TextScript.latin}),
 };
 
-/// The language most of [lines] were translated from, or `null` when none
-/// has a known source language.
-///
-/// On a tie, [current] wins if it is among the tied, so the label doesn't
-/// flicker between equally common languages; otherwise the first tied
-/// language in line order does.
-TranslateLanguage? detectedLanguage(
-  List<TranslatedLine> lines,
-  TranslateLanguage? current,
-) {
-  final counts = <TranslateLanguage, int>{};
-  for (final line in lines) {
-    final language = switch (line.sourceLanguage) {
-      final tag? => BCP47Code.fromRawValue(tag),
-      null => null,
-    };
-    if (language != null) counts[language] = (counts[language] ?? 0) + 1;
-  }
-  if (counts.isEmpty) return null;
-  final most = counts.values.reduce((a, b) => a > b ? a : b);
-  if (counts[current] == most) return current;
-  return counts.entries.firstWhere((entry) => entry.value == most).key;
-}
+/// What the source chip reads for [status] while detecting.
+String sourceStatusLabel(SourceStatus status) => switch (status) {
+  SourceSearching() => 'Looking for text…',
+  SourceGuessed(:final language) => '${displayName(language)}?',
+  SourceDownloading(:final language) ||
+  SourceReady(:final language) => displayName(language),
+  SourceUnsupported(:final tag) => "${tagName(tag)} can't be translated",
+  SourceNotFound() => 'No supported text found',
+  SourceDownloadFailed(:final language) =>
+    '${displayName(language)} · download failed',
+};
+
+/// The English name of the language [tag], or [tag] itself when it isn't
+/// known: a translatable language, or one ML Kit identifies but can't
+/// translate.
+String tagName(String tag) => switch (BCP47Code.fromRawValue(tag)) {
+  final language? => displayName(language),
+  null => untranslatableNames[tag] ?? tag,
+};
+
+/// Names of languages ML Kit's language identification reports but its
+/// translation doesn't cover.
+const untranslatableNames = {
+  'am': 'Amharic',
+  'ar-Latn': 'Arabic (Latin script)',
+  'bg-Latn': 'Bulgarian (Latin script)',
+  'co': 'Corsican',
+  'el-Latn': 'Greek (Latin script)',
+  'fy': 'Frisian',
+  'ha': 'Hausa',
+  'haw': 'Hawaiian',
+  'hi-Latn': 'Hindi (Latin script)',
+  'hmn': 'Hmong',
+  'ig': 'Igbo',
+  'ja-Latn': 'Japanese (Latin script)',
+  'km': 'Khmer',
+  'ku': 'Kurdish',
+  'ky': 'Kyrgyz',
+  'la': 'Latin',
+  'lb': 'Luxembourgish',
+  'lo': 'Lao',
+  'mi': 'Maori',
+  'mn': 'Mongolian',
+  'my': 'Burmese',
+  'ne': 'Nepali',
+  'ny': 'Chichewa',
+  'ps': 'Pashto',
+  'ru-Latn': 'Russian (Latin script)',
+  'sd': 'Sindhi',
+  'si': 'Sinhala',
+  'sm': 'Samoan',
+  'sn': 'Shona',
+  'so': 'Somali',
+  'st': 'Sesotho',
+  'su': 'Sundanese',
+  'tg': 'Tajik',
+  'uz': 'Uzbek',
+  'xh': 'Xhosa',
+  'yi': 'Yiddish',
+  'yo': 'Yoruba',
+  'zh-Latn': 'Chinese (Latin script)',
+  'zu': 'Zulu',
+};

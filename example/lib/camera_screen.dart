@@ -84,8 +84,8 @@ class _CameraScreenState extends State<CameraScreen> {
   // `null` is "Detect language".
   TranslateLanguage? _source;
 
-  // While detecting, the language most shown lines came from.
-  TranslateLanguage? _detected;
+  // Where the view stands in finding the source language.
+  SourceStatus _status = const SourceSearching();
 
   bool _torch = false;
   bool _showHud = false;
@@ -118,10 +118,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _onControllerChanged() {
-    final detected = _source == null
-        ? detectedLanguage(_controller.lines, _detected)
-        : null;
-    if (detected != _detected) setState(() => _detected = detected);
+    final status = _controller.sourceStatus;
+    if (status != _status) setState(() => _status = status);
 
     final target = _controller.targetLanguage;
     if (target != _viewTarget) setState(() => _viewTarget = target);
@@ -188,12 +186,7 @@ class _CameraScreenState extends State<CameraScreen> {
       models: _models,
     );
     if (picked case (:final choice)) {
-      setState(() {
-        _source = choice;
-        _detected = choice == null
-            ? detectedLanguage(_controller.lines, null)
-            : null;
-      });
+      setState(() => _source = choice);
     }
   }
 
@@ -304,12 +297,9 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
                 const SizedBox(height: 12),
                 _LanguagePill(
-                  source: switch ((_source, _detected)) {
-                    (final TranslateLanguage source, _) => displayName(source),
-                    (null, final TranslateLanguage detected) => displayName(
-                      detected,
-                    ),
-                    (null, null) => sourceName(null),
+                  source: switch (_source) {
+                    final source? => displayName(source),
+                    null => sourceStatusLabel(_status),
                   },
                   detecting: _source == null,
                   target: switch (_target) {

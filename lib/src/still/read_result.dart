@@ -3,6 +3,7 @@ import 'dart:ui' show Color, Rect, Size;
 import 'package:flutter/foundation.dart' show immutable, listEquals;
 
 import '../geometry/image_rotation.dart';
+import '../models/source_status.dart';
 
 /// One translated paragraph of a read frame.
 @immutable
@@ -88,6 +89,7 @@ final class ReadResult {
     required this.imageSize,
     required this.rotation,
     this.untranslatedLanguages = const {},
+    this.sourceStatus,
     this.timings = (
       recognition: Duration.zero,
       translation: Duration.zero,
@@ -110,6 +112,10 @@ final class ReadResult {
   /// translated: their source languages, and every model, source or target,
   /// that wasn't ready yet.
   final Set<String> untranslatedLanguages;
+
+  /// Where the frame's source language stands, or `null` when no paragraph
+  /// got a language.
+  final SourceStatus? sourceStatus;
 
   /// How long each stage of the read took.
   final ReadTimings timings;

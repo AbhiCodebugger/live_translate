@@ -5,6 +5,7 @@ import 'package:google_mlkit_translation/google_mlkit_translation.dart'
     show TranslateLanguage;
 import 'package:live_translate/src/controller/live_translate_controller.dart';
 import 'package:live_translate/src/controller/live_translate_state.dart';
+import 'package:live_translate/src/models/source_status.dart';
 import 'package:live_translate/src/models/text_script.dart';
 import 'package:live_translate/src/models/translated_line.dart';
 import 'package:live_translate/src/pipeline/pipeline_metrics.dart';
@@ -75,6 +76,44 @@ void main() {
       'scripts latin,devanagari',
       'torch true',
     ]);
+  });
+
+  group('source status', () {
+    void publish(SourceStatus status) => publishToController(
+      controller,
+      state: LiveTranslateState.running,
+      lines: const [],
+      target: TranslateLanguage.english,
+      sourceStatus: status,
+    );
+
+    test('is searching when not attached', () {
+      expect(controller.sourceStatus, const SourceSearching());
+    });
+
+    test('a guessed language notifies', () {
+      attachController(controller, host);
+      publish(const SourceGuessed(TranslateLanguage.spanish));
+      expect(
+        controller.sourceStatus,
+        const SourceGuessed(TranslateLanguage.spanish),
+      );
+      expect(notifications, 1);
+    });
+
+    test('an unchanged status does not notify', () {
+      attachController(controller, host);
+      publish(const SourceReady(TranslateLanguage.spanish));
+      publish(const SourceReady(TranslateLanguage.spanish));
+      expect(notifications, 1);
+    });
+
+    test('detaching goes back to searching', () {
+      attachController(controller, host);
+      publish(const SourceReady(TranslateLanguage.spanish));
+      detachController(controller, host);
+      expect(controller.sourceStatus, const SourceSearching());
+    });
   });
 
   test('publishing a change notifies once', () {

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart'
     show TranslateLanguage;
 
+import '../models/source_status.dart';
 import '../models/text_script.dart';
 import '../models/translated_line.dart';
 import '../pipeline/pipeline_metrics.dart';
@@ -32,6 +33,7 @@ class LiveTranslateController extends ChangeNotifier {
   LiveTranslateState _state = LiveTranslateState.initializing;
   List<TranslatedLine> _lines = const [];
   TranslateLanguage? _targetLanguage;
+  SourceStatus _sourceStatus = const SourceSearching();
   ControllerHost? _host;
   final _metrics = StreamController<PipelineMetrics>.broadcast();
 
@@ -48,6 +50,20 @@ class LiveTranslateController extends ChangeNotifier {
   /// controller is no longer attached to a view. Listeners are notified when
   /// it changes.
   TranslateLanguage? get targetLanguage => _targetLanguage;
+
+  /// Where the attached view stands in finding the language it translates
+  /// from: searching, guessed, downloading, ready, unsupported, not found
+  /// or download failed. Listeners are notified when it changes. A
+  /// controller not attached to a view reports [SourceSearching].
+  ///
+  /// ```dart
+  /// final label = switch (controller.sourceStatus) {
+  ///   SourceGuessed(:final language) => '${language.name}?',
+  ///   SourceDownloading(:final language) => 'Downloading ${language.name}…',
+  ///   _ => '',
+  /// };
+  /// ```
+  SourceStatus get sourceStatus => _sourceStatus;
 
   /// The metrics of each read the view shows, live or frozen, emitted once
   /// its result is on screen.
@@ -101,10 +117,12 @@ class LiveTranslateController extends ChangeNotifier {
     LiveTranslateState state,
     List<TranslatedLine> lines,
     TranslateLanguage target,
+    SourceStatus sourceStatus,
   ) {
     _state = state;
     _lines = List.unmodifiable(lines);
     _targetLanguage = target;
+    _sourceStatus = sourceStatus;
     notifyListeners();
   }
 }
@@ -148,7 +166,8 @@ void detachController(LiveTranslateController controller, ControllerHost host) {
     .._host = null
     .._state = LiveTranslateState.initializing
     .._lines = const []
-    .._targetLanguage = null;
+    .._targetLanguage = null
+    .._sourceStatus = const SourceSearching();
 }
 
 /// Updates what [controller] reports, notifying its listeners if anything
@@ -158,13 +177,15 @@ void publishToController(
   required LiveTranslateState state,
   required List<TranslatedLine> lines,
   required TranslateLanguage target,
+  SourceStatus sourceStatus = const SourceSearching(),
 }) {
   if (state == controller._state &&
       listEquals(lines, controller._lines) &&
-      target == controller._targetLanguage) {
+      target == controller._targetLanguage &&
+      sourceStatus == controller._sourceStatus) {
     return;
   }
-  controller._publish(state, lines, target);
+  controller._publish(state, lines, target, sourceStatus);
 }
 
 /// Emits [metrics] on [controller]'s [LiveTranslateController.metrics], if

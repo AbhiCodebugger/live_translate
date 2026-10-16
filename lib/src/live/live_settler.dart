@@ -20,6 +20,10 @@ const sceneChange = 18.0;
 /// How long the picture must stay steady before it is read.
 const settleTime = Duration(milliseconds: 300);
 
+/// While the source language isn't settled, a steady picture is read again
+/// this long after the previous read finished.
+const rereadInterval = Duration(seconds: 1);
+
 /// Once the labels have followed more than this share of the frame's width
 /// or height, a steady picture is read again.
 const panShare = 0.10;
@@ -42,8 +46,8 @@ enum SettleAction {
 
 /// Decides when the live view reads and how its labels follow the picture:
 /// read once the picture settles, hold the result while the labels follow
-/// small movements, read again after a pan, clear on fast movement or a new
-/// scene.
+/// small movements, read again after a pan or while [unsettled], clear on
+/// fast movement or a new scene.
 final class LiveSettler {
   /// Creates a settler reading the time from [now].
   LiveSettler({DateTime Function()? now}) : _now = now ?? DateTime.now;
@@ -51,12 +55,18 @@ final class LiveSettler {
   final DateTime Function() _now;
 
   DateTime? _steadySince;
+  DateTime? _finishedAt;
   bool _hasResult = false;
   bool _reading = false;
   bool _waitForMovement = false;
   Offset _shownOffset = Offset.zero;
   Offset _pendingOffset = Offset.zero;
   Size _frameSize = Size.zero;
+
+  /// Whether the shown result's source language isn't settled yet, so a
+  /// steady picture is read again every [rereadInterval]. Set by the view
+  /// after each read.
+  bool unsettled = false;
 
   /// How far the shown labels have to be moved: the picture's total shift
   /// since the frame they were read from.
@@ -112,6 +122,9 @@ final class LiveSettler {
       return SettleAction.none;
     }
     if (!_hasResult) return SettleAction.read;
+    if (unsettled && now.difference(_finishedAt ?? now) >= rereadInterval) {
+      return SettleAction.read;
+    }
     final panned =
         _shownOffset.dx.abs() > panShare * width ||
         _shownOffset.dy.abs() > panShare * frameSize.height;
@@ -135,6 +148,7 @@ final class LiveSettler {
     _reading = false;
     if (success) {
       _hasResult = true;
+      _finishedAt = _now();
       _shownOffset = _pendingOffset;
     } else {
       _waitForMovement = true;
@@ -149,6 +163,8 @@ final class LiveSettler {
   /// Forgets the shown result and any read, as when the camera restarts.
   void reset() {
     _steadySince = null;
+    _finishedAt = null;
+    unsettled = false;
     _hasResult = false;
     _reading = false;
     _waitForMovement = false;

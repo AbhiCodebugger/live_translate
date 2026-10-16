@@ -73,6 +73,75 @@ void main() {
     );
   });
 
+  group('while unsettled', () {
+    test('a steady picture is read again a second after the read', () {
+      showResult();
+      settler.unsettled = true;
+      expect(
+        holdStill(const Duration(milliseconds: 900)),
+        everyElement(SettleAction.none),
+      );
+      expect(
+        holdStill(const Duration(milliseconds: 150)),
+        contains(SettleAction.read),
+      );
+    });
+
+    test('keeps reading every second until settled', () {
+      showResult();
+      settler.unsettled = true;
+      var reads = 0;
+      for (var t = 0; t < 2200; t += 33) {
+        if (frame() == SettleAction.read) {
+          reads++;
+          settler
+            ..readStarted()
+            ..readFinished(success: true);
+        }
+      }
+      expect(reads, 2);
+      settler.unsettled = false;
+      expect(
+        holdStill(const Duration(seconds: 5)),
+        everyElement(SettleAction.none),
+      );
+    });
+
+    test('no second read while one runs', () {
+      showResult();
+      settler
+        ..unsettled = true
+        ..readStarted();
+      expect(
+        holdStill(const Duration(seconds: 2)),
+        everyElement(SettleAction.none),
+      );
+    });
+
+    test('movement still waits for the picture to settle', () {
+      showResult();
+      settler.unsettled = true;
+      holdStill(const Duration(milliseconds: 900));
+      frame(const Motion(Offset(20, 0), 4));
+      expect(
+        holdStill(const Duration(milliseconds: 250)),
+        everyElement(SettleAction.none),
+      );
+      expect(
+        holdStill(const Duration(milliseconds: 100)),
+        contains(SettleAction.read),
+      );
+    });
+
+    test('reset forgets it', () {
+      showResult();
+      settler
+        ..unsettled = true
+        ..reset();
+      expect(settler.unsettled, isFalse);
+    });
+  });
+
   test('drifts add up into the offset', () {
     showResult();
     for (var i = 0; i < 3; i++) {

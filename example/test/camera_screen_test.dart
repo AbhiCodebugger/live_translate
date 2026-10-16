@@ -101,7 +101,7 @@ void main() {
     expect(
       find.descendant(
         of: chip('source-chip'),
-        matching: find.text('Detect language'),
+        matching: find.text('Looking for text…'),
       ),
       findsOneWidget,
     );
@@ -299,7 +299,7 @@ void main() {
     testWidgets('names the language of the shown lines', (tester) async {
       frenchPage();
       await pumpScreen(tester);
-      expect(sourceChipReads('Detect language'), findsOneWidget);
+      expect(sourceChipReads('Looking for text…'), findsOneWidget);
 
       await deliverFrames(tester);
       expect(sourceChipReads('French'), findsOneWidget);
@@ -329,7 +329,7 @@ void main() {
       expect(sourceChipReads('Hindi'), findsOneWidget);
     });
 
-    testWidgets('goes back to Detect language when the lines leave', (
+    testWidgets('goes back to looking for text when the lines leave', (
       tester,
     ) async {
       frenchPage();
@@ -343,7 +343,74 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
       await tester.pump();
       await tester.pump();
-      expect(sourceChipReads('Detect language'), findsOneWidget);
+      expect(sourceChipReads('Looking for text…'), findsOneWidget);
+    });
+
+    testWidgets('a guess is shown before it is confirmed', (tester) async {
+      scene
+        ..lines = ['Salida']
+        ..guesses = {
+          'Salida': const [LanguageGuess('es', 0.9)],
+        };
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      expect(sourceChipReads('Spanish?'), findsOneWidget);
+      expect(store.downloads, isEmpty);
+    });
+
+    testWidgets('a confirmed language shows its download', (tester) async {
+      const text = 'Salida de emergencia por la escalera';
+      scene
+        ..lines = [text]
+        ..guesses = {
+          text: const [LanguageGuess('es', 0.95)],
+        };
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      expect(sourceChipReads('Spanish'), findsOneWidget);
+      expect(spinnerIn('source-chip'), findsOneWidget);
+    });
+
+    testWidgets('a failed download says so', (tester) async {
+      const text = 'Salida de emergencia por la escalera';
+      store.downloadError = const ModelNotDownloaded(TranslateLanguage.spanish);
+      scene
+        ..lines = [text]
+        ..guesses = {
+          text: const [LanguageGuess('es', 0.95)],
+        };
+      await pumpScreen(tester);
+      await deliverFrames(tester);
+      // The download started in the real async zone the frames are
+      // delivered from, so it fails there.
+      await tester.runAsync(() async {
+        store.downloadGate.complete();
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(sourceChipReads('Spanish · download failed'), findsOneWidget);
+    });
+
+    testWidgets('nothing readable is not found after three reads', (
+      tester,
+    ) async {
+      scene.lines = const [];
+      await pumpScreen(tester);
+      await deliverFrames(tester, count: 14);
+      expect(sourceChipReads('No supported text found'), findsOneWidget);
+    });
+
+    testWidgets('an untranslatable language is named', (tester) async {
+      scene
+        ..lines = ['Lorem ipsum']
+        ..guesses = {
+          'Lorem ipsum': const [LanguageGuess('la', 0.9)],
+        };
+      await pumpScreen(tester);
+      await deliverFrames(tester, count: 14);
+      expect(sourceChipReads("Latin can't be translated"), findsOneWidget);
     });
 
     testWidgets('keeps the language while frozen', (tester) async {

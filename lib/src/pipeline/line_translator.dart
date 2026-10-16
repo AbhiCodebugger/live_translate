@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max;
 
 import 'package:flutter/foundation.dart' show immutable, setEquals;
 import 'package:google_mlkit_translation/google_mlkit_translation.dart'
@@ -11,6 +12,7 @@ import '../engines/model_store.dart';
 import '../engines/text_engine.dart';
 import '../engines/translate_engine.dart';
 import '../errors.dart';
+import '../models/source_status.dart';
 import '../models/text_script.dart';
 
 /// The lowest confidence at which a language guess is trusted.
@@ -133,6 +135,18 @@ final class LineTranslation {
       'LineTranslation(${line.text} [$sourceLanguage] -> $translatedText)';
 }
 
+/// What happened to an automatic model download.
+enum ModelEvent {
+  /// The download started.
+  started,
+
+  /// The model is on the device.
+  ready,
+
+  /// The download failed. A later confirmed line retries it.
+  failed,
+}
+
 /// Where a language's translation model stands.
 enum _ModelState { checking, available, missing, downloading }
 
@@ -167,6 +181,10 @@ final class LineTranslator {
        _models = modelStore,
        _cache = cache ?? TranslationCache();
 
+  /// Each automatic download's start and end, as it happens.
+  Stream<({TranslateLanguage language, ModelEvent event})> get modelEvents =>
+      _modelEvents.stream;
+
   /// The confidence a detection needs to count towards confirmation.
   static const confirmConfidence = 0.8;
 
@@ -194,7 +212,12 @@ final class LineTranslator {
   final _sightingScripts = <String, TextScript>{};
   final _reportedUnsupported = <String>{};
   final _confirmedAtOnce = <String>{};
+  final _failed = <TranslateLanguage>{};
   final void Function(TranslateLanguage language)? _onModelReady;
+  final _modelEvents =
+      StreamController<
+        ({TranslateLanguage language, ModelEvent event})
+      >.broadcast(sync: true);
   int _frame = 0;
   bool _sourceDownloadRunning = false;
 
@@ -220,6 +243,26 @@ final class LineTranslator {
     List<RecognizedLine> lines, {
     required TranslateLanguage target,
     Set<TranslateLanguage>? sourceLanguages,
+  }) async => (await translateFrame(
+    lines,
+    target: target,
+    sourceLanguages: sourceLanguages,
+  )).lines;
+
+  /// Translates [lines] as [translateLines] does, and also gives the
+  /// frame's source status.
+  ///
+  /// The status names the language of the most lines not in [target], or
+  /// [target] when every line with a language is in it. On a tie it keeps
+  /// [current], a BCP-47 tag, when that is tied, and otherwise takes the
+  /// first tied line's language. It is `null` when no line has a language.
+  /// An untranslatable language is [SourceSearching] until it is
+  /// confirmed, and [SourceUnsupported] after.
+  Future<({List<LineTranslation> lines, SourceStatus? status})> translateFrame(
+    List<RecognizedLine> lines, {
+    required TranslateLanguage target,
+    Set<TranslateLanguage>? sourceLanguages,
+    String? current,
   }) async {
     final frame = ++_frame;
     final guesses = await Future.wait([
@@ -230,7 +273,46 @@ final class LineTranslator {
       for (var i = 0; i < lines.length; i++)
         _translateLine(lines[i], sources[i], target),
     ]);
-    return results.nonNulls.toList();
+    return (
+      lines: results.nonNulls.toList(),
+      status: _statusOf(sources, target, current),
+    );
+  }
+
+  SourceStatus? _statusOf(
+    List<String?> sources,
+    TranslateLanguage target,
+    String? current,
+  ) {
+    final counts = <String, int>{};
+    var inTarget = false;
+    for (final source in sources) {
+      if (source == null) continue;
+      if (source == target.bcpCode) {
+        inTarget = true;
+        continue;
+      }
+      counts[source] = (counts[source] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return inTarget ? SourceReady(target) : null;
+
+    final most = counts.values.reduce(max);
+    final named = counts[current] == most
+        ? current!
+        : counts.entries.firstWhere((entry) => entry.value == most).key;
+
+    final language = BCP47Code.fromRawValue(named);
+    if (language == null) {
+      return _isConfirmed(named)
+          ? SourceUnsupported(named)
+          : const SourceSearching();
+    }
+    if (_failed.contains(language)) return SourceDownloadFailed(language);
+    return switch (_states[language]) {
+      _ModelState.available => SourceReady(language),
+      _ModelState.downloading => SourceDownloading(language),
+      _ => SourceGuessed(language),
+    };
   }
 
   /// The qualifying language guesses for [line], most confident first.
@@ -290,9 +372,16 @@ final class LineTranslator {
     }
 
     for (final MapEntry(key: script, value: members) in groups.entries) {
+      // Untranslatable guesses, such as lorem ipsum read as Latin, don't
+      // vote when a translatable language is in the running: they would
+      // carry the real paragraphs along with them.
+      final translatableOnly = members.any(
+        (i) => guesses[i].any((guess) => _isTranslatable(guess.tag)),
+      );
       final totals = <String, double>{};
       for (final i in members) {
         for (final guess in guesses[i]) {
+          if (translatableOnly && !_isTranslatable(guess.tag)) continue;
           totals[guess.tag] = (totals[guess.tag] ?? 0) + guess.confidence;
         }
       }
@@ -301,6 +390,17 @@ final class LineTranslator {
           .key;
       final support = <double>[];
       for (final i in members) {
+        if (translatableOnly &&
+            !guesses[i].any((guess) => _isTranslatable(guess.tag))) {
+          // Only untranslatable guesses: the line keeps its own.
+          final own = guesses[i].first;
+          sources[i] = own.tag;
+          if (own.confidence >= confirmConfidence) {
+            _sight(own.tag, frame);
+            if (_isLong(lines[i].text)) _confirmedAtOnce.add(own.tag);
+          }
+          continue;
+        }
         sources[i] = winner;
         for (final guess in guesses[i]) {
           if (guess.tag != winner) continue;
@@ -393,10 +493,14 @@ final class LineTranslator {
     if (count < confirmFrames) return false;
     final script = _sightingScripts[tag];
     if (script == null) return true;
+    // A translatable language doesn't compete with untranslatable ones,
+    // which no longer win its script's vote.
+    final translatable = _isTranslatable(tag);
     return _sightingScripts.entries.every(
       (other) =>
           other.key == tag ||
           other.value != script ||
+          (translatable && !_isTranslatable(other.key)) ||
           _recentSightings(other.key) < count,
     );
   }
@@ -430,6 +534,7 @@ final class LineTranslator {
             }));
         if (present) {
           _states[language] = _ModelState.available;
+          _failed.remove(language);
           return true;
         }
         if (_states[language] == _ModelState.checking) {
@@ -448,7 +553,9 @@ final class LineTranslator {
       _sourceDownloadRunning = true;
     }
     _states[language] = _ModelState.downloading;
+    _failed.remove(language);
     _onError(ModelNotDownloaded(language));
+    _modelEvents.add((language: language, event: ModelEvent.started));
     unawaited(
       _models
           .download(language, wifiOnly: false)
@@ -456,10 +563,15 @@ final class LineTranslator {
             (_) {
               _states[language] = _ModelState.available;
               _onModelReady?.call(language);
+              _modelEvents.add((language: language, event: ModelEvent.ready));
             },
             // A later confirmed line retries; the failure was already
             // reported as the missing model.
-            onError: (Object _) => _states[language] = _ModelState.missing,
+            onError: (Object _) {
+              _states[language] = _ModelState.missing;
+              _failed.add(language);
+              _modelEvents.add((language: language, event: ModelEvent.failed));
+            },
           )
           .whenComplete(() {
             if (isSource) _sourceDownloadRunning = false;
@@ -474,3 +586,6 @@ final _letter = RegExp(r'\p{L}', unicode: true);
 bool _isLong(String text) =>
     _letter.allMatches(text).take(LineTranslator.confirmLetters).length ==
     LineTranslator.confirmLetters;
+
+/// Whether [tag] is a language with an on-device translation model.
+bool _isTranslatable(String tag) => BCP47Code.fromRawValue(tag) != null;

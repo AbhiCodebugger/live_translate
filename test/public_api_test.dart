@@ -16,6 +16,36 @@ void main() {
     expect(TextScript.values, hasLength(2));
   });
 
+  test('the entry library exposes every source status', () {
+    final statuses = <SourceStatus>[
+      const SourceSearching(),
+      const SourceGuessed(TranslateLanguage.spanish),
+      const SourceDownloading(TranslateLanguage.spanish),
+      const SourceReady(TranslateLanguage.spanish),
+      const SourceUnsupported('la'),
+      const SourceNotFound(),
+      const SourceDownloadFailed(TranslateLanguage.spanish),
+    ];
+    expect(statuses.toSet(), hasLength(7));
+  });
+
+  test('the README source status label compiles and covers every stage', () {
+    // Mirrors the "Following language detection" recipe in README.md.
+    final controller = LiveTranslateController();
+    addTearDown(controller.dispose);
+    String sourceLabel() => switch (controller.sourceStatus) {
+      SourceSearching() => 'Looking for text…',
+      SourceGuessed(:final language) => '${language.name}?',
+      SourceDownloading(:final language) => 'Downloading ${language.name}…',
+      SourceReady(:final language) => language.name,
+      SourceUnsupported(:final tag) => "'$tag' can't be translated",
+      SourceNotFound() => 'No supported text found',
+      SourceDownloadFailed(:final language) =>
+        "${language.name} didn't download",
+    };
+    expect(sourceLabel(), 'Looking for text…');
+  });
+
   test('the entry library exposes every exception subtype', () {
     final errors = <LiveTranslateException>[
       const CameraPermissionDenied(),

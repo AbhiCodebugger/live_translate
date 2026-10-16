@@ -24,7 +24,7 @@ void main() {
     expect(find.text('No camera available.'), findsOneWidget);
 
     expect(find.text('Live Translate'), findsOneWidget);
-    expect(find.text('Detect language'), findsOneWidget);
+    expect(find.text('Looking for text…'), findsOneWidget);
     expect(find.byTooltip('Freeze'), findsOneWidget);
     expect(find.byTooltip('More'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);

@@ -13,6 +13,7 @@ export 'src/controller/live_translate_controller.dart'
 export 'src/controller/live_translate_state.dart' show LiveTranslateState;
 export 'src/errors.dart';
 export 'src/models/overlay_style.dart';
+export 'src/models/source_status.dart';
 export 'src/models/text_script.dart';
 export 'src/models/translated_line.dart';
 export 'src/pipeline/pipeline_metrics.dart' show PipelineMetrics;
