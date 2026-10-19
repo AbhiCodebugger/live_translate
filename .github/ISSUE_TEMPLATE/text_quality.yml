@@ -1,0 +1,63 @@
+name: Text read or translated wrongly
+description: Text is missed, misread, split oddly, detected as the wrong language or translated badly.
+labels: [recognition]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A photo of the text is the most useful thing you can attach: it can become a replay test that keeps the fix working. **Only share photos of public text** (signs, menus, printed pages) with no faces or personal details, because this repository is public.
+  - type: input
+    id: package-version
+    attributes:
+      label: live_translate version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and OS version
+      placeholder: "iPhone 14, iOS 26.6.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What went wrong
+      multiple: true
+      options:
+        - Text wasn't found
+        - Text was misread
+        - A paragraph was split or merged wrongly
+        - The wrong source language was detected
+        - The translation is wrong
+        - The label is placed or sized wrongly
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings
+      description: The target language, and `sourceLanguages` and `scripts` if you set them.
+      placeholder: "Target English; sourceLanguages: {hindi}; scripts: {devanagari}"
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What you saw and what you expected
+      description: The original text, what the view showed, and what it should have shown.
+    validations:
+      required: true
+  - type: textarea
+    id: photos
+    attributes:
+      label: Photo and screenshot
+      description: A photo of the text itself, and a screenshot of the view showing the problem.
+  - type: checkboxes
+    id: public
+    attributes:
+      label: Privacy
+      options:
+        - label: Any photo I attached shows only public text, with no faces or personal details.
+          required: true

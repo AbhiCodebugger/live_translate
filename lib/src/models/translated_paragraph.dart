@@ -1,6 +1,8 @@
 import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart' show immutable;
+import 'package:google_mlkit_translation/google_mlkit_translation.dart'
+    show BCP47Code, TranslateLanguage;
 
 /// One paragraph of camera text and its translation, positioned in the
 /// view.
@@ -16,8 +18,8 @@ final class TranslatedParagraph {
     required this.id,
     required this.sourceText,
     required this.translatedText,
+    required this.sourceLanguage,
     required this.rect,
-    this.sourceLanguage,
     this.opacity = 1.0,
   }) : assert(
          opacity >= 0.0 && opacity <= 1.0,
@@ -39,9 +41,8 @@ final class TranslatedParagraph {
   /// The translation of [sourceText] into the target language.
   final String translatedText;
 
-  /// The detected language of [sourceText] as a BCP-47 code, or `null` if it
-  /// could not be determined.
-  final String? sourceLanguage;
+  /// The language [sourceText] was translated from.
+  final TranslateLanguage sourceLanguage;
 
   /// The paragraph's bounds in the view's coordinate space.
   final Rect rect;
@@ -75,6 +76,7 @@ final class TranslatedParagraph {
   @override
   String toString() =>
       'TranslatedParagraph(id: $id, sourceText: "$sourceText", '
-      'translatedText: "$translatedText", sourceLanguage: $sourceLanguage, '
+      'translatedText: "$translatedText", '
+      'sourceLanguage: ${sourceLanguage.bcpCode}, '
       'rect: $rect, opacity: $opacity)';
 }

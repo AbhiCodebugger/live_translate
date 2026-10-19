@@ -9,6 +9,7 @@ void main() {
       id: 'a',
       sourceText: 'Hola',
       translatedText: 'Hello',
+      sourceLanguage: TranslateLanguage.spanish,
       rect: Rect.zero,
     );
     expect(line.opacity, 1.0);

@@ -55,7 +55,9 @@ final class MultiScriptTextEngine implements TextEngine {
         RecognizedLine(
           text: line.text,
           box: line.box,
-          paragraph: script.index * paragraphsPerScript + line.paragraph,
+          paragraph:
+              TextScript.values.indexOf(script) * paragraphsPerScript +
+              line.paragraph,
         ),
   ];
 

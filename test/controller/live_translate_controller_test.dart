@@ -39,6 +39,7 @@ const _line = TranslatedParagraph(
   id: 't1',
   sourceText: 'निकास',
   translatedText: 'Exit',
+  sourceLanguage: TranslateLanguage.hindi,
   rect: Rect.fromLTRB(17.5, 125, 142.5, 162.5),
 );
 

@@ -8,9 +8,10 @@ import '../../models/text_script.dart';
 /// Internal to the package: not exported from the entry library.
 extension TextScriptMlKit on TextScript {
   /// The ML Kit script for this [TextScript].
-  TextRecognitionScript get recognitionScript => switch (this) {
-    TextScript.latin => TextRecognitionScript.latin,
+  TextRecognitionScript get recognitionScript {
+    if (this == TextScript.latin) return TextRecognitionScript.latin;
     // ML Kit's plugin spells this value "devanagiri".
-    TextScript.devanagari => TextRecognitionScript.devanagiri,
-  };
+    if (this == TextScript.devanagari) return TextRecognitionScript.devanagiri;
+    throw StateError('No ML Kit recognizer for $this');
+  }
 }

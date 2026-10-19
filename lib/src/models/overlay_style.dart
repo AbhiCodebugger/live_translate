@@ -49,6 +49,27 @@ final class OverlayStyle {
   /// The weight of the translated text.
   final FontWeight fontWeight;
 
+  /// A copy of this style with the given fields replaced.
+  ///
+  /// The same font size checks as the constructor apply.
+  OverlayStyle copyWith({
+    Color? backgroundColor,
+    Color? textColor,
+    double? borderRadius,
+    EdgeInsets? padding,
+    double? minFontSize,
+    double? maxFontSize,
+    FontWeight? fontWeight,
+  }) => OverlayStyle(
+    backgroundColor: backgroundColor ?? this.backgroundColor,
+    textColor: textColor ?? this.textColor,
+    borderRadius: borderRadius ?? this.borderRadius,
+    padding: padding ?? this.padding,
+    minFontSize: minFontSize ?? this.minFontSize,
+    maxFontSize: maxFontSize ?? this.maxFontSize,
+    fontWeight: fontWeight ?? this.fontWeight,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is OverlayStyle &&
@@ -70,4 +91,11 @@ final class OverlayStyle {
     maxFontSize,
     fontWeight,
   );
+
+  @override
+  String toString() =>
+      'OverlayStyle(backgroundColor: $backgroundColor, textColor: $textColor, '
+      'borderRadius: $borderRadius, padding: $padding, '
+      'minFontSize: $minFontSize, maxFontSize: $maxFontSize, '
+      'fontWeight: $fontWeight)';
 }

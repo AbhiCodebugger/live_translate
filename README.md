@@ -41,7 +41,10 @@ const LiveTranslateView();
 - [Example app](#example-app)
 - [Scripts and languages](#scripts-and-languages)
 - [Limitations](#limitations)
+- [Alternatives](#alternatives)
+- [FAQ](#faq)
 - [How it works](#how-it-works)
+- [Contributing](#contributing)
 
 ## Install
 
@@ -158,7 +161,7 @@ Every parameter is optional.
 | `targetLanguage` | the phone's language, or English if it can't be translated | The language to translate into. |
 | `sourceLanguages` | `null`: detect each paragraph | The languages the text is in. A single language skips detection. |
 | `scripts` | `{TextScript.latin, TextScript.devanagari}` | The scripts to read. Reading fewer is faster. |
-| `resolution` | `ResolutionPreset.medium` | The camera's capture resolution. Higher reads smaller text, more slowly. |
+| `resolution` | `ResolutionPreset.medium` | The camera's capture resolution. Higher reads smaller text, more slowly. Changing it restarts the camera. |
 | `style` | `OverlayStyle()` | How the built-in labels look. |
 | `overlayBuilder` | `null`: built-in labels | Draws the translations yourself; see [Custom labels](#custom-labels). |
 | `placeholderBuilder` | a progress indicator | Shown while the camera starts or restarts. |
@@ -168,7 +171,7 @@ Every parameter is optional.
 | `showDebugHud` | `false` | Shows read timings and frame cost over the camera; see [Measuring performance](#measuring-performance). |
 | `controller` | `null` | A `LiveTranslateController` to drive and observe the view. |
 
-A changed parameter takes effect without restarting the camera. The one exception is `resolution`: it's read only when the camera starts, so give the view a new `key` to apply a new one.
+A changed parameter takes effect without restarting the camera, except `resolution`, which restarts it at the new resolution.
 
 ### `LiveTranslateController`
 
@@ -179,6 +182,8 @@ A `ChangeNotifier`: listen to it, for example with a `ListenableBuilder`, and `d
 | `state` | A `LiveTranslateState`: `initializing`, `running`, `frozen` or `error`. |
 | `paragraphs` | The shown `TranslatedParagraph`s, in the view's coordinates. |
 | `targetLanguage` | The language being translated into. `null` until the view shows its first frame. |
+| `scripts` | The scripts being read. `null` until the view shows its first frame. |
+| `sourceLanguages` | The expected source languages, or `null` while detecting (and before the first frame). |
 | `sourceStatus` | How far finding the source language has got; see [Following language detection](#following-language-detection). |
 | `metrics` | A broadcast `Stream<PipelineMetrics>` with one event per read shown. |
 | `freeze()` / `resume()` | Pauses on the current picture and translates it, or goes back to live. |
@@ -196,7 +201,7 @@ Changes made through the controller and through the widget's parameters follow w
 | `id` | Stays the same while the view keeps reading this paragraph in the same place. Use it to key widgets. |
 | `sourceText` | The recognised text. |
 | `translatedText` | Its translation. |
-| `sourceLanguage` | The detected language as a BCP-47 code, or `null`. |
+| `sourceLanguage` | The `TranslateLanguage` it was translated from. |
 | `rect` | Where the paragraph is, in the view's coordinates. |
 | `opacity` | From 1.0 down to 0.0 as the label fades out after a fast movement or a new scene. |
 
@@ -214,13 +219,17 @@ Labels take their colours from the page. The colours below are used only where t
 | `borderRadius` | `6` | The corner radius of each label. |
 | `padding` | `EdgeInsets.symmetric(horizontal: 4, vertical: 2)` | The space between a label's edge and its text. |
 
+To change a few fields, start from the defaults: `const OverlayStyle().copyWith(maxFontSize: 48)`.
+
 ### Other types
 
-- `TextScript`: `latin` or `devanagari`.
+- `TextScript`: `TextScript.latin` or `TextScript.devanagari`, and `TextScript.values`.
 - `SourceStatus`: a sealed class; see [Following language detection](#following-language-detection).
 - `PipelineMetrics`: `recognition`, `translation`, `sampling` and `total` durations, plus `paragraphs` (how many were translated) and `frozen`.
 - `LiveTranslateException`: a sealed class; see [Handling errors](#handling-errors).
 - `TranslationModels`: checks, downloads and deletes translation models. `download(language, wifiOnly: true)` waits for Wi-Fi by default on Android; see [Managing models](#managing-models-from-your-own-ui).
+
+**Stability:** `LiveTranslateException` and `SourceStatus` are sealed, so a `switch` over them can cover every case without a default. New subtypes come only in a major version. `TextScript` is a set of constants rather than an enum, so new scripts (such as Chinese, Japanese and Korean) can arrive in a minor version; give a `switch` expression over it a `_` case.
 
 ## Recipes
 
@@ -456,7 +465,7 @@ LiveTranslateView(
 
 ## Performance
 
-Measured on 2026-10-19 in profile mode with Flutter 3.47.7, using this repository after 0.2.1 (the changes under Unreleased in the changelog). The Samsung is a budget Android phone, and the iPhone 14 is a 2022 flagship.
+Measured on 2026-10-19 in profile mode with Flutter 3.47.7, on the code released as 1.0.0. Its later API changes and iOS download fix don't affect these timings. The Samsung is a budget Android phone, and the iPhone 14 is a 2022 flagship.
 
 | | Samsung Galaxy M17, Android 16 | iPhone 14, iOS 26.6.1 |
 |---|---:|---:|
@@ -540,7 +549,63 @@ The example also holds replay tests, which run saved photos of real signs and pa
 - Horizontal text only; rotated text is planned.
 - The first use of each language needs a network connection to download its model.
 - ML Kit needs a real iOS device.
-- 0.x releases may change the API. 1.0 will be the stability promise.
+- The API follows semantic versioning: breaking changes come only in a major version.
+
+## Alternatives
+
+| | live_translate | ML Kit plugins yourself | `realtime_translation` | Cloud APIs | Google Translate app |
+|---|---|---|---|---|---|
+| What it is | One widget | `google_mlkit_text_recognition` + `google_mlkit_translation` + `camera` | A Flutter plugin (0.0.3) | Google Cloud Vision + Cloud Translation, or similar | Google's app, with its camera mode |
+| Works offline | Yes, once a language's model is downloaded | Yes | No: translates through the `translator` package, which calls the Google Translate website | No | Yes, with downloaded languages |
+| Draws the translation on the page | Yes, in the page's colours | You build it | No: returns text to your app | You build it | Yes |
+| Steady labels while the hand moves | Yes | You build it | Not applicable | You build it | Yes |
+| Detects languages and downloads models | Yes | You build it | No: you supply the language lists | Detects; nothing to download | Yes |
+| Inside your own app | Yes | Yes | Yes | Yes | No |
+| Cost | Free | Free | Free, but [unofficial](https://pub.dev/packages/translator) | Billed per use | Free |
+
+- **Building it yourself** on the ML Kit plugins gives the most control. Most of this package's code is what it takes on top of them: converting camera frames, mapping boxes onto the preview, grouping lines into paragraphs, deciding when to read, tracking camera motion, voting on languages, and fitting labels.
+- **Cloud APIs** read more scripts and translate more languages, but every read needs a network round trip, sends the picture off the phone and is billed.
+- **The Google Translate app** is the experience this package aims for, but it's a separate app, so it can't be part of your screens or flows.
+
+## FAQ
+
+**Does it work offline?**
+Yes, once each language's translation model is on the phone. Text recognition is bundled with the app. Each translation model (about 30 MB) downloads the first time its language is needed, so that first use needs a network. To have models ready before a user goes offline, download them with [`TranslationModels`](#managing-models-from-your-own-ui).
+
+**Is the camera image sent anywhere?**
+No. Frames are read and translated on the phone by ML Kit, and the package makes no network calls of its own. Only model downloads use the network. For what Google's ML Kit SDK itself reports, see Google's ML Kit terms.
+
+**Why don't labels appear?**
+Work through these:
+1. Did `onError` report `CameraPermissionDenied`?
+2. Is the source status downloading? The first translation waits for the model. Show `controller.sourceStatus` to see where it is.
+3. Is the text in a script the view reads? Latin and Devanagari only, and only the scripts in `scripts`.
+4. Is the camera held still? The view reads once the picture has been steady for about 300 ms.
+5. Is the text very small? Move closer, or pass `resolution: ResolutionPreset.high`.
+6. Is the text already in the target language? Then there's nothing to translate.
+
+Turning on `showDebugHud` shows whether reads happen and how many paragraphs they find.
+
+**Why does it wait for the camera to hold still instead of translating every frame?**
+Reading and translating takes 35–75 ms on the test phones, longer with more text. Doing that on every frame would drain the battery and make labels flicker as the text shifts. Instead, the view reads once the picture is steady, then moves the labels with the camera, which costs about 1 ms a frame. See [How it works](#how-it-works).
+
+**Which languages does it support?**
+Text in Latin or Devanagari script, in any of the 59 languages ML Kit translates, into any of those 59 languages. See [Scripts and languages](#scripts-and-languages). Chinese, Japanese and Korean are planned for 1.1.
+
+**A Hindi sign is detected as Nepali. Is that a problem?**
+No. Language identification often takes short Hindi signs for Nepali, which ML Kit can't translate. The view translates such paragraphs from Hindi or Marathi instead, whichever ranks higher.
+
+**Can I translate a photo from the gallery, or use the front camera?**
+Not in 1.0. The view reads the rear camera only. To pause on the current picture, use `controller.freeze()`.
+
+**Can I change how the translations look?**
+Yes. `OverlayStyle` sets the fallback colours, font sizes, weight, corner radius and padding of the built-in labels. To draw something else entirely, pass an [`overlayBuilder`](#custom-labels).
+
+**Does it run on the iOS simulator, the web or desktop?**
+No. It needs a real Android or iOS device, because ML Kit runs only there.
+
+**How much does it add to my app?**
+About 34 MB to an Android arm64 APK, mostly ML Kit and the camera plugin. Devanagari adds about 0.6 MB more. See [Size impact](#size-impact).
 
 ## How it works
 
@@ -556,6 +621,12 @@ Each label covers its paragraph in the page's colours. Its text starts at the or
 While the result is held, the labels move with the measured camera shift, and no more frames are read once the source language is settled. Until then, while the [source status](#following-language-detection) is searching or guessed, a steady picture is read again a second after each read. So a short sign confirms its language in a few seconds without moving the phone. A fast movement or a new scene fades the labels out, and the next steady picture is read again. Reads never queue, so the camera never falls behind.
 
 Paragraphs in the same script share one language per read, so a stray guess follows the rest of the page. When any paragraph has a language ML Kit can translate, only those languages take part in the vote. That way a block of lorem ipsum identified as Latin doesn't drag a real heading along with it. A Devanagari paragraph identified only as a language ML Kit can't translate, such as Nepali, is translated from Hindi or Marathi instead: whichever ranks higher in the identification, or Hindi. Short Hindi signs are often taken for Nepali.
+
+## Contributing
+
+Contributions are welcome: bug reports, photos of text that reads wrongly, docs fixes and code. To report a problem, open an [issue](https://github.com/AbhiCodebugger/live_translate/issues) with your phone, OS and package version, and a debug HUD screenshot if you can.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setting up, the checks to run before a pull request, how behaviour changes update the specs, adding a replay photo, and where help is most useful.
 
 ## License
 

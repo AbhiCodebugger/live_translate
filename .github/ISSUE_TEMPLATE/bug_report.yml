@@ -1,0 +1,64 @@
+name: Bug report
+description: Something doesn't work as the README describes, such as a crash, an error or a camera problem.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. If the problem is text that is read or translated wrongly, use the **Text read or translated wrongly** template instead. The [FAQ](https://github.com/AbhiCodebugger/live_translate#faq) covers the most common reason labels don't appear.
+  - type: input
+    id: package-version
+    attributes:
+      label: live_translate version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: flutter-version
+    attributes:
+      label: Flutter version
+      description: The first line of `flutter --version`.
+      placeholder: "Flutter 3.47.7 • channel stable"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and OS version
+      placeholder: "Samsung Galaxy M17, Android 16"
+    validations:
+      required: true
+  - type: dropdown
+    id: build-mode
+    attributes:
+      label: Build mode
+      options:
+        - Debug
+        - Profile
+        - Release
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: How you use the view
+      description: Your `LiveTranslateView` and controller setup, trimmed to what matters.
+      render: dart
+  - type: textarea
+    id: errors
+    attributes:
+      label: Errors and logs
+      description: What `onError` reported, and any exception or stack trace from the console.
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: "A screenshot with `showDebugHud: true` shows whether reads happen and how long they take."

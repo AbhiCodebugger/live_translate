@@ -1,4 +1,15 @@
-## Unreleased
+## 1.0.0
+
+The first stable release: from here on, breaking changes come only in a major version.
+
+**Breaking:** two API changes from the 1.0 API review. Most apps need no changes.
+
+| Before | Now | What to change |
+|---|---|---|
+| `TranslatedParagraph.sourceLanguage` was a `String?` BCP-47 code | a non-null `TranslateLanguage` | Use `.bcpCode` where a string was used, drop null checks, and pass `sourceLanguage:` when building one in tests. |
+| `TextScript` was an enum | a final class with constants | Nothing for `TextScript.latin`, `TextScript.devanagari`, `values` or `name`. A `switch` expression over a `TextScript` needs a `_` case. |
+
+`LiveTranslateException` and `SourceStatus` stay sealed. New subtypes will come only in a major version, while new scripts can come in a minor one.
 
 Fixed:
 
@@ -7,9 +18,12 @@ Fixed:
 
 New:
 
+* Changing `LiveTranslateView.resolution` restarts the camera at the new resolution. Before, the change was ignored until the camera restarted for another reason.
+* `LiveTranslateController.scripts` and `sourceLanguages`: what the view reads and expects, whether set through the widget or the controller.
+* `OverlayStyle.copyWith` and `toString`.
 * The debug HUD shows the view's own work per camera frame, as `N fps · frame A.A ms avg, W.W max`: measuring how the picture moved and deciding whether to read, over the last second.
 * Labels repaint faster while the camera moves: their text layouts are kept between frames instead of being measured again (about 2.6× faster on the host benchmark). Picking up the page's colours is about 20% faster. Neither changes what's drawn.
-* README: reorganised, with badges, a contents list and an API section covering every parameter of `LiveTranslateView`, `LiveTranslateController`, `TranslatedParagraph` and `OverlayStyle`.
+* README: reorganised, with badges, a contents list, an API section covering every parameter of `LiveTranslateView`, `LiveTranslateController`, `TranslatedParagraph` and `OverlayStyle`, a comparison with alternatives, an FAQ and a contributing guide.
 * README: new Performance section with read times, frame cost, jank and memory on a Samsung Galaxy M17 and an iPhone 14, and how to measure them; new Size impact section, with `tool/size_impact.sh` to measure it again.
 * README: Latin-only Android apps need `-dontwarn com.google.mlkit.vision.text.devanagari.**` in `proguard-rules.pro`, or release builds fail in R8.
 

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: FAQ
+    url: https://github.com/AbhiCodebugger/live_translate#faq
+    about: Offline use, labels not appearing, supported languages and more.
+  - name: Setup and usage
+    url: https://github.com/AbhiCodebugger/live_translate#platform-setup
+    about: Android and iOS setup, and the API reference.

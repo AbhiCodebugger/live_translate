@@ -88,7 +88,7 @@ typedef OverlayBuilder =
 /// ```
 ///
 /// Pass a [LiveTranslateController] to freeze the view, change its settings
-/// or read the lines it shows.
+/// or read the paragraphs it shows.
 class LiveTranslateView extends StatefulWidget {
   /// Creates the view.
   const LiveTranslateView({
@@ -111,7 +111,7 @@ class LiveTranslateView extends StatefulWidget {
     @internal this.elapsed,
   });
 
-  /// The language lines are translated into, or `null` for the device's
+  /// The language paragraphs are translated into, or `null` for the device's
   /// language (English when the device language can't be translated
   /// on-device).
   final TranslateLanguage? targetLanguage;
@@ -121,10 +121,11 @@ class LiveTranslateView extends StatefulWidget {
   final Set<TextScript> scripts;
 
   /// The languages the text is expected to be in, or `null` to detect each
-  /// line's language. A single language skips detection entirely.
+  /// paragraph's language. A single language skips detection entirely.
   final Set<TranslateLanguage>? sourceLanguages;
 
-  /// The capture resolution.
+  /// The capture resolution. Changing it restarts the camera at the new
+  /// resolution.
   final ResolutionPreset resolution;
 
   /// How translated labels look. Unused when [overlayBuilder] is given.
@@ -198,7 +199,7 @@ class LiveTranslateView extends StatefulWidget {
   /// The same numbers reach code through [LiveTranslateController.metrics].
   final bool showDebugHud;
 
-  /// Drives and observes this view: its state, lines, freezing, settings
+  /// Drives and observes this view: its state, paragraphs, freezing, settings
   /// and torch. Settings changed through it and settings passed here
   /// follow the most recent change.
   final LiveTranslateController? controller;
@@ -236,7 +237,10 @@ class LiveTranslateView extends StatefulWidget {
 class _LiveTranslateViewState extends State<LiveTranslateView>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin
     implements ControllerHost {
-  late final CameraSession _session;
+  // Replaced when the resolution changes.
+  late CameraSession _session;
+  late ResolutionPreset _sessionResolution;
+  Future<void> _cameraChange = Future.value();
   late final LiveTranslateEngines _engines;
   late final LiveSettler _settler;
 
@@ -359,9 +363,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       duration: const Duration(milliseconds: 200),
       value: 1,
     )..addListener(_onFade);
-    _session =
-        widget.createSession?.call(widget.resolution) ??
-        PluginCameraSession(resolution: widget.resolution);
+    _session = _createSession(widget.resolution);
     _engines = widget.createEngines?.call() ?? mlKitEngines();
     _frameSubscription = _session.frames.listen(_onFrame);
     _syncHud();
@@ -402,6 +404,10 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     }
     if (rebuild) _replacePipeline();
     if (oldWidget.showDebugHud != widget.showDebugHud) _syncHud();
+    if (oldWidget.resolution != widget.resolution) {
+      // Restarts run one after another; each starts the latest resolution.
+      _cameraChange = _cameraChange.then((_) => _restartCamera());
+    }
   }
 
   @override
@@ -841,6 +847,32 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
 
   // Camera.
 
+  CameraSession _createSession(ResolutionPreset resolution) {
+    _sessionResolution = resolution;
+    return widget.createSession?.call(resolution) ??
+        PluginCameraSession(resolution: resolution);
+  }
+
+  /// Replaces the camera session with one at the widget's resolution, and
+  /// starts it unless the app is in the background, where resuming will.
+  Future<void> _restartCamera() async {
+    if (!mounted || widget.resolution == _sessionResolution) return;
+    final old = _session;
+    // As in dispose: the old session's frames stop with it.
+    unawaited(_frameSubscription?.cancel());
+    _frameSubscription = null;
+    setState(() {
+      _running = false;
+      _forget();
+    });
+    await old.stop();
+    await old.dispose();
+    if (!mounted) return;
+    _session = _createSession(widget.resolution);
+    _frameSubscription = _session.frames.listen(_onFrame);
+    if (!_suspended) await _start();
+  }
+
   /// Forgets everything read, as the camera starts or stops.
   void _forget() {
     _readToken++;
@@ -891,6 +923,15 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
 
   void _report(LiveTranslateException error) => widget.onError?.call(error);
 
+  /// The language [paragraph] was translated from. A read only translates a
+  /// paragraph whose language has a translation model, so its tag parses.
+  static TranslateLanguage _translatedFrom(ReadParagraph paragraph) {
+    final tag = paragraph.sourceLanguage;
+    final language = tag == null ? null : BCP47Code.fromRawValue(tag);
+    assert(language != null, 'A translated paragraph has source "$tag"');
+    return language!;
+  }
+
   /// Tells the controller and the callbacks what is shown, after this
   /// frame: they may call setState, which isn't allowed during build.
   void _scheduleReport() {
@@ -911,6 +952,8 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
           state: _state,
           paragraphs: paragraphs,
           target: _target,
+          scripts: _scripts,
+          sourceLanguages: _sourceLanguages,
           sourceStatus: _sourceStatus,
         );
         if (_pendingMetrics case final metrics?) {
@@ -974,7 +1017,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
               id: id,
               sourceText: paragraph.sourceText,
               translatedText: paragraph.translatedText,
-              sourceLanguage: paragraph.sourceLanguage,
+              sourceLanguage: _translatedFrom(paragraph),
               rect: place(paragraph.box),
               opacity: opacity,
             ),

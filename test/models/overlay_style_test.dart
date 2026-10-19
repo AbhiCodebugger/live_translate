@@ -47,4 +47,35 @@ void main() {
       expect(OverlayStyle(minFontSize: 14, maxFontSize: 14).minFontSize, 14);
     });
   });
+
+  group('copyWith', () {
+    test('replaces one field and keeps the rest', () {
+      final style = const OverlayStyle().copyWith(maxFontSize: 48);
+      expect(style.maxFontSize, 48);
+      expect(style.minFontSize, 10);
+      expect(style.borderRadius, 6);
+      expect(style.fontWeight, FontWeight.w600);
+      expect(style.backgroundColor, const Color(0xCC000000));
+    });
+
+    test('with no arguments is equal to the original', () {
+      const style = OverlayStyle(borderRadius: 2, maxFontSize: 40);
+      expect(style.copyWith(), style);
+    });
+
+    test('checks the font size bounds', () {
+      expect(
+        () => const OverlayStyle().copyWith(minFontSize: 40),
+        throwsAssertionError,
+      );
+    });
+  });
+
+  test('describes every field', () {
+    final text = const OverlayStyle().toString();
+    expect(text, startsWith('OverlayStyle('));
+    expect(text, contains('maxFontSize: 28.0'));
+    expect(text, contains('minFontSize: 10.0'));
+    expect(text, contains('fontWeight: FontWeight.w600'));
+  });
 }

@@ -1,6 +1,8 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart'
+    show TranslateLanguage;
 import 'package:live_translate/src/models/translated_paragraph.dart';
 
 void main() {
@@ -8,7 +10,7 @@ void main() {
 
   TranslatedParagraph line({
     double opacity = 1.0,
-    String? sourceLanguage = 'hi',
+    TranslateLanguage sourceLanguage = TranslateLanguage.hindi,
   }) => TranslatedParagraph(
     id: 'line-1',
     sourceText: 'नमस्ते',
@@ -28,15 +30,24 @@ void main() {
       expect(line(opacity: 0.5), isNot(line()));
     });
 
-    test('defaults to full opacity and an undetermined language', () {
+    test('defaults to full opacity and keeps its source language', () {
       const minimal = TranslatedParagraph(
         id: 'line-1',
         sourceText: 'Hola',
         translatedText: 'Hello',
+        sourceLanguage: TranslateLanguage.spanish,
         rect: rect,
       );
       expect(minimal.opacity, 1.0);
-      expect(minimal.sourceLanguage, isNull);
+      expect(minimal.sourceLanguage, TranslateLanguage.spanish);
+    });
+
+    test('is not equal when only the source language differs', () {
+      expect(line(sourceLanguage: TranslateLanguage.marathi), isNot(line()));
+    });
+
+    test('describes its source language by code', () {
+      expect(line().toString(), contains('sourceLanguage: hi'));
     });
 
     test('rejects opacity outside 0..1', () {

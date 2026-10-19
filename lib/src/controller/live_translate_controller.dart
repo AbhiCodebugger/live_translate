@@ -33,6 +33,8 @@ class LiveTranslateController extends ChangeNotifier {
   LiveTranslateState _state = LiveTranslateState.initializing;
   List<TranslatedParagraph> _paragraphs = const [];
   TranslateLanguage? _targetLanguage;
+  Set<TextScript>? _scripts;
+  Set<TranslateLanguage>? _sourceLanguages;
   SourceStatus _sourceStatus = const SourceSearching();
   ControllerHost? _host;
   final _metrics = StreamController<PipelineMetrics>.broadcast();
@@ -51,6 +53,23 @@ class LiveTranslateController extends ChangeNotifier {
   /// controller is no longer attached to a view. Listeners are notified when
   /// it changes.
   TranslateLanguage? get targetLanguage => _targetLanguage;
+
+  /// The scripts the view reads, as set through the widget or [setScripts],
+  /// whichever came last.
+  ///
+  /// `null` until the view has shown its first frame, and again once the
+  /// controller is no longer attached to a view. Listeners are notified when
+  /// it changes. The set can't be modified.
+  Set<TextScript>? get scripts => _scripts;
+
+  /// The languages the view expects the text to be in, as set through the
+  /// widget or [setSourceLanguages], whichever came last.
+  ///
+  /// `null` while the view detects each paragraph's language, and also when
+  /// the controller isn't attached to a view; [scripts] is non-null whenever
+  /// it is attached. Listeners are notified when it changes. The set can't
+  /// be modified.
+  Set<TranslateLanguage>? get sourceLanguages => _sourceLanguages;
 
   /// Where the attached view stands in finding the language it translates
   /// from: searching, guessed, downloading, ready, unsupported, not found
@@ -128,11 +147,17 @@ class LiveTranslateController extends ChangeNotifier {
     LiveTranslateState state,
     List<TranslatedParagraph> paragraphs,
     TranslateLanguage target,
+    Set<TextScript> scripts,
+    Set<TranslateLanguage>? sourceLanguages,
     SourceStatus sourceStatus,
   ) {
     _state = state;
     _paragraphs = List.unmodifiable(paragraphs);
     _targetLanguage = target;
+    _scripts = Set.unmodifiable(scripts);
+    _sourceLanguages = sourceLanguages == null
+        ? null
+        : Set.unmodifiable(sourceLanguages);
     _sourceStatus = sourceStatus;
     notifyListeners();
   }
@@ -181,6 +206,8 @@ void detachController(LiveTranslateController controller, ControllerHost host) {
     .._state = LiveTranslateState.initializing
     .._paragraphs = const []
     .._targetLanguage = null
+    .._scripts = null
+    .._sourceLanguages = null
     .._sourceStatus = const SourceSearching();
 }
 
@@ -191,15 +218,26 @@ void publishToController(
   required LiveTranslateState state,
   required List<TranslatedParagraph> paragraphs,
   required TranslateLanguage target,
+  Set<TextScript> scripts = const {TextScript.latin, TextScript.devanagari},
+  Set<TranslateLanguage>? sourceLanguages,
   SourceStatus sourceStatus = const SourceSearching(),
 }) {
   if (state == controller._state &&
       listEquals(paragraphs, controller._paragraphs) &&
       target == controller._targetLanguage &&
+      setEquals(scripts, controller._scripts) &&
+      setEquals(sourceLanguages, controller._sourceLanguages) &&
       sourceStatus == controller._sourceStatus) {
     return;
   }
-  controller._publish(state, paragraphs, target, sourceStatus);
+  controller._publish(
+    state,
+    paragraphs,
+    target,
+    scripts,
+    sourceLanguages,
+    sourceStatus,
+  );
 }
 
 /// Emits [metrics] on [controller]'s [LiveTranslateController.metrics], if

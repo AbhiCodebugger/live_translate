@@ -9,6 +9,7 @@ TranslatedParagraph _line(String translated, String source, int i) =>
       id: 'p$i',
       sourceText: source,
       translatedText: translated,
+      sourceLanguage: TranslateLanguage.spanish,
       rect: Rect.fromLTWH(0, 40.0 * i, 100, 30),
     );
 

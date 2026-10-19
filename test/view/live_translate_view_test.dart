@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:camera/camera.dart' show CameraImage;
+import 'package:camera/camera.dart' show CameraImage, ResolutionPreset;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -112,12 +112,17 @@ RecognizedLine _line(String text, [Rect box = _box]) =>
 
 void main() {
   late FakeCameraSession session;
+
+  /// Builds each camera session when set; otherwise every view gets
+  /// [session].
+  FakeCameraSession Function(ResolutionPreset resolution)? sessionFor;
   late _Engines engines;
   late List<LiveTranslateException> errors;
   late DateTime clock;
 
   setUp(() {
     session = FakeCameraSession();
+    sessionFor = null;
     engines = _Engines();
     errors = [];
     clock = DateTime(2026);
@@ -136,6 +141,7 @@ void main() {
     WidgetBuilder? placeholderBuilder,
     bool showDebugHud = false,
     Duration Function()? elapsed,
+    ResolutionPreset resolution = ResolutionPreset.medium,
   }) => MaterialApp(
     home: LiveTranslateView(
       targetLanguage: deviceTarget ? null : target,
@@ -149,7 +155,8 @@ void main() {
       placeholderBuilder: placeholderBuilder,
       showDebugHud: showDebugHud,
       controller: controller,
-      createSession: (_) => session,
+      resolution: resolution,
+      createSession: (resolution) => sessionFor?.call(resolution) ?? session,
       createEngines: engines.build,
       now: () => clock,
       elapsed: elapsed,
@@ -1180,6 +1187,7 @@ void main() {
       final line = controller.paragraphs.single;
       expect(line.rect, _mappedBox);
       expect(line.translatedText, '[en] Salida');
+      expect(line.sourceLanguage, TranslateLanguage.spanish);
     });
 
     testWidgets('lines follow the labels', (tester) async {
@@ -1572,6 +1580,81 @@ void main() {
         await pumpControlled(tester);
         await tester.pumpWidget(const SizedBox());
         expect(controller.targetLanguage, isNull);
+      });
+    });
+
+    group('scripts and source languages', () {
+      late int notified;
+
+      setUp(() {
+        notified = 0;
+        controller.addListener(() => notified++);
+      });
+
+      testWidgets('are the defaults', (tester) async {
+        expect(controller.scripts, isNull);
+        await pumpControlled(tester);
+        expect(controller.scripts, {TextScript.latin, TextScript.devanagari});
+        expect(controller.sourceLanguages, isNull);
+      });
+
+      testWidgets('follow the controller', (tester) async {
+        await pumpControlled(tester);
+        final before = notified;
+        await controller.setScripts({TextScript.latin});
+        await controller.setSourceLanguages({TranslateLanguage.spanish});
+        await tester.pump();
+        expect(controller.scripts, {TextScript.latin});
+        expect(controller.sourceLanguages, {TranslateLanguage.spanish});
+        expect(notified, greaterThan(before));
+      });
+
+      testWidgets('follow the widget', (tester) async {
+        await pumpControlled(tester);
+        final before = notified;
+        await tester.pumpWidget(
+          app(
+            scripts: const {TextScript.devanagari},
+            sourceLanguages: const {TranslateLanguage.hindi},
+            controller: controller,
+          ),
+        );
+        await tester.pump();
+        expect(controller.scripts, {TextScript.devanagari});
+        expect(controller.sourceLanguages, {TranslateLanguage.hindi});
+        expect(notified, greaterThan(before));
+      });
+
+      testWidgets('go back to detection', (tester) async {
+        await pumpControlled(tester);
+        await controller.setSourceLanguages({TranslateLanguage.spanish});
+        await tester.pump();
+        await controller.setSourceLanguages(null);
+        await tester.pump();
+        expect(controller.sourceLanguages, isNull);
+        expect(controller.scripts, isNotNull);
+      });
+
+      testWidgets("can't be modified", (tester) async {
+        await pumpControlled(tester);
+        await controller.setSourceLanguages({TranslateLanguage.spanish});
+        await tester.pump();
+        expect(
+          () => controller.scripts!.add(TextScript.latin),
+          throwsUnsupportedError,
+        );
+        expect(
+          () => controller.sourceLanguages!.add(TranslateLanguage.french),
+          throwsUnsupportedError,
+        );
+        expect(controller.scripts, {TextScript.latin, TextScript.devanagari});
+      });
+
+      testWidgets('are null once the view is removed', (tester) async {
+        await pumpControlled(tester);
+        await tester.pumpWidget(const SizedBox());
+        expect(controller.scripts, isNull);
+        expect(controller.sourceLanguages, isNull);
       });
     });
   });
@@ -2230,6 +2313,121 @@ void main() {
       expect(hud(), findsOneWidget);
       await tester.pumpWidget(app());
       expect(hud(), findsNothing);
+    });
+  });
+
+  group('resolution', () {
+    late List<ResolutionPreset> created;
+    late List<FakeCameraSession> sessions;
+
+    /// Gives each session to [prepare] before the view starts it.
+    void trackSessions([void Function(FakeCameraSession session)? prepare]) {
+      created = [];
+      sessions = [];
+      sessionFor = (resolution) {
+        created.add(resolution);
+        session = FakeCameraSession();
+        if (sessions.isNotEmpty) prepare?.call(session);
+        sessions.add(session);
+        return session;
+      };
+    }
+
+    Future<void> changeTo(
+      WidgetTester tester,
+      ResolutionPreset resolution, {
+      LiveTranslateController? controller,
+      WidgetBuilder? placeholderBuilder,
+    }) async {
+      await tester.pumpWidget(
+        app(
+          resolution: resolution,
+          controller: controller,
+          placeholderBuilder: placeholderBuilder,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('a new resolution restarts the camera at it', (tester) async {
+      trackSessions();
+      engines.lines = [_line('Salida')];
+      await pumpView(tester);
+      final first = session;
+      await changeTo(tester, ResolutionPreset.high);
+      expect(created, [ResolutionPreset.medium, ResolutionPreset.high]);
+      expect(first.stops, 1);
+      expect(first.disposes, 1);
+      expect(session.starts, 1);
+      await settle(tester);
+      expect(labels(tester).single.text, '[en] Salida');
+    });
+
+    testWidgets('the same resolution keeps the camera', (tester) async {
+      trackSessions();
+      await pumpView(tester);
+      await tester.pumpWidget(app(target: TranslateLanguage.french));
+      await tester.pump();
+      expect(created, [ResolutionPreset.medium]);
+      expect(session.stops, 0);
+    });
+
+    testWidgets('a frozen view resumes live', (tester) async {
+      trackSessions();
+      final controller = LiveTranslateController();
+      addTearDown(controller.dispose);
+      engines.lines = [_line('Salida')];
+      await pumpView(tester, app(controller: controller));
+      await settle(tester);
+      await controller.freeze();
+      await tester.pump();
+      expect(controller.state, LiveTranslateState.frozen);
+      await changeTo(tester, ResolutionPreset.high, controller: controller);
+      expect(controller.state, LiveTranslateState.running);
+      expect(controller.paragraphs, isEmpty);
+    });
+
+    testWidgets('the placeholder shows during the restart', (tester) async {
+      final gate = Completer<void>();
+      trackSessions((next) => next.startGate = gate);
+      Widget starting(BuildContext context) => const Text('Starting…');
+      await pumpView(tester, app(placeholderBuilder: starting));
+      expect(find.text('Starting…'), findsNothing);
+      await changeTo(
+        tester,
+        ResolutionPreset.high,
+        placeholderBuilder: starting,
+      );
+      expect(find.text('Starting…'), findsOneWidget);
+      gate.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Starting…'), findsNothing);
+    });
+
+    testWidgets('a failed restart is reported', (tester) async {
+      trackSessions((next) => next.startError = const CameraUnavailable());
+      await pumpView(tester);
+      await changeTo(tester, ResolutionPreset.high);
+      expect(errors.last, isA<CameraUnavailable>());
+    });
+
+    testWidgets('a read from before the restart is not shown', (tester) async {
+      trackSessions();
+      final controller = LiveTranslateController();
+      addTearDown(controller.dispose);
+      engines
+        ..lines = [_line('Salida')]
+        ..textGate = Completer<void>();
+      await pumpView(tester, app(controller: controller));
+      await settle(tester);
+      expect(engines.reads, 1);
+      await changeTo(tester, ResolutionPreset.high, controller: controller);
+      engines.textGate!.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(controller.paragraphs, isEmpty);
     });
   });
 }
