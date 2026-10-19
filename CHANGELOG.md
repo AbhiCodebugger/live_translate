@@ -1,5 +1,12 @@
 ## Unreleased
 
+Fixed:
+
+* iOS: model downloads now finish. `google_mlkit_translation` never reports the end of a download on iOS, so the live view stayed on "downloading", the held picture wasn't read again when its model arrived, and `TranslationModels.download` hung or threw `ModelNotDownloaded` for a model that did download. On iOS, a download now completes once its model is on the device, checked once a second, and fails if the model hasn't arrived after 5 minutes. Android is unchanged.
+* iOS: `TranslationModels.download`'s `wifiOnly` has no effect there, because ML Kit always downloads on any network. The README and API docs now say so.
+
+New:
+
 * The debug HUD shows the view's own work per camera frame, as `N fps · frame A.A ms avg, W.W max`: measuring how the picture moved and deciding whether to read, over the last second.
 * Labels repaint faster while the camera moves: their text layouts are kept between frames instead of being measured again (about 2.6× faster on the host benchmark). Picking up the page's colours is about 20% faster. Neither changes what's drawn.
 * README: reorganised, with badges, a contents list and an API section covering every parameter of `LiveTranslateView`, `LiveTranslateController`, `TranslatedParagraph` and `OverlayStyle`.

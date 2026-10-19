@@ -43,6 +43,10 @@ final class TranslationModels {
   /// connection instead of using mobile data, so on mobile data this may not
   /// complete until the device joins Wi-Fi.
   ///
+  /// On iOS, ML Kit always downloads on any network, so [wifiOnly] has no
+  /// effect, and it doesn't report a failed download: there, the download
+  /// fails if the model isn't on the device within 5 minutes.
+  ///
   /// Throws `ModelNotDownloaded` if the download fails.
   Future<void> download(TranslateLanguage language, {bool wifiOnly = true}) =>
       _store.download(language, wifiOnly: wifiOnly);

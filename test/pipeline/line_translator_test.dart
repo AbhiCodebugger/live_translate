@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:ui';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart'
-    show TranslateLanguage;
+    show ModelManager, TranslateLanguage;
 import 'package:live_translate/src/engines/language_engine.dart';
+import 'package:live_translate/src/engines/mlkit/mlkit_model_store.dart';
 import 'package:live_translate/src/engines/text_engine.dart';
 import 'package:live_translate/src/errors.dart';
 import 'package:live_translate/src/models/source_status.dart';
@@ -19,6 +20,41 @@ const hi = TranslateLanguage.hindi;
 
 RecognizedLine line(String text) =>
     RecognizedLine(text: text, box: const Rect.fromLTWH(0, 0, 10, 10));
+
+/// A model manager behaving like the iOS plugin: a download call never
+/// answers by itself, and any later model call cancels it.
+final class _IosPluginManager implements ModelManager {
+  final present = <String>{};
+  final downloads = <String>[];
+  Completer<bool>? _pending;
+
+  void _cancelPending() {
+    _pending?.completeError(PlatformException(code: 'cancelled'));
+    _pending = null;
+  }
+
+  @override
+  String get method => 'fake';
+
+  @override
+  MethodChannel get channel => const MethodChannel('fake');
+
+  @override
+  Future<bool> isModelDownloaded(String model) async {
+    _cancelPending();
+    return present.contains(model);
+  }
+
+  @override
+  Future<bool> downloadModel(String model, {bool isWifiRequired = true}) {
+    _cancelPending();
+    downloads.add(model);
+    return (_pending = Completer<bool>()).future;
+  }
+
+  @override
+  Future<bool> deleteModel(String model) async => true;
+}
 
 void main() {
   late FakeLanguageEngine languages;
@@ -870,6 +906,91 @@ void main() {
         ).toString(),
         'LineTranslation(Salida [es] -> Exit)',
       );
+    });
+  });
+
+  group('iOS downloads through the ML Kit store', () {
+    late _IosPluginManager plugin;
+    late List<TranslateLanguage> ready;
+    late List<({TranslateLanguage language, ModelEvent event})> events;
+    late LineTranslator iosTranslator;
+
+    /// Builds the translator over an iOS store whose model [arriving]
+    /// shows up after [after] checks, or never when [after] is null.
+    void build({String? arriving, int? after}) {
+      var waits = 0;
+      plugin = _IosPluginManager()..present.addAll({'en', 'es'});
+      ready = [];
+      events = [];
+      iosTranslator = LineTranslator(
+        languageEngine: languages,
+        translateEngine: translator,
+        modelStore: MlKitModelStore(
+          manager: plugin,
+          platform: TargetPlatform.iOS,
+          wait: (_) async {
+            if (++waits == after) plugin.present.add(arriving!);
+          },
+        ),
+        onError: errors.add,
+        onModelReady: ready.add,
+      );
+      iosTranslator.modelEvents.listen(events.add);
+    }
+
+    Future<({List<LineTranslation> lines, SourceStatus? status})> hindi() =>
+        iosTranslator.translateFrame(
+          [line('नमस्ते')],
+          target: en,
+          sourceLanguages: {hi},
+        );
+
+    test('a cancelled source download finishes when the model arrives, '
+        'and the status becomes ready', () async {
+      build(arriving: 'hi', after: 10);
+      for (var i = 0; i < 3; i++) {
+        await hindi();
+      }
+      await pumpEventQueue();
+      expect(plugin.downloads, ['hi']);
+      expect(ready, [hi]);
+      expect(events.map((e) => e.event), [
+        ModelEvent.started,
+        ModelEvent.ready,
+      ]);
+      final frame = await hindi();
+      expect(frame.status, const SourceReady(hi));
+      expect(frame.lines.single.translatedText, '[en] नमस्ते');
+    });
+
+    test('a missing target model that arrives later is used', () async {
+      build(arriving: 'fr', after: 20);
+      identifyAs('Salida', 'es');
+      iosTranslator.prepare(fr);
+      await pumpEventQueue();
+      expect(plugin.downloads, ['fr']);
+      expect(ready, [fr]);
+      final lines = await iosTranslator.translateLines([
+        line('Salida'),
+      ], target: fr);
+      expect(lines.single.translatedText, '[fr] Salida');
+    });
+
+    test('a model that never arrives fails, and a later confirmed read '
+        'retries', () async {
+      build();
+      for (var i = 0; i < 3; i++) {
+        await hindi();
+      }
+      await pumpEventQueue();
+      expect(events.map((e) => e.event), [
+        ModelEvent.started,
+        ModelEvent.failed,
+      ]);
+      expect(ready, isEmpty);
+      await hindi();
+      expect(plugin.downloads, ['hi', 'hi']);
+      await pumpEventQueue();
     });
   });
 }

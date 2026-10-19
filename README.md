@@ -220,7 +220,7 @@ Labels take their colours from the page. The colours below are used only where t
 - `SourceStatus`: a sealed class; see [Following language detection](#following-language-detection).
 - `PipelineMetrics`: `recognition`, `translation`, `sampling` and `total` durations, plus `paragraphs` (how many were translated) and `frozen`.
 - `LiveTranslateException`: a sealed class; see [Handling errors](#handling-errors).
-- `TranslationModels`: checks, downloads and deletes translation models; see [Managing models](#managing-models-from-your-own-ui).
+- `TranslationModels`: checks, downloads and deletes translation models. `download(language, wifiOnly: true)` waits for Wi-Fi by default on Android; see [Managing models](#managing-models-from-your-own-ui).
 
 ## Recipes
 
@@ -384,7 +384,7 @@ final models = TranslationModels();
 
 Future<void> prepare() async {
   if (!await models.isDownloaded(TranslateLanguage.hindi)) {
-    // Waits for Wi-Fi unless you pass wifiOnly: false.
+    // On Android, waits for Wi-Fi unless you pass wifiOnly: false.
     await models.download(TranslateLanguage.hindi);
   }
   final onDevice = await models.downloaded();
@@ -392,7 +392,9 @@ Future<void> prepare() async {
 }
 ```
 
-`delete(language)` removes a model. `download` throws `ModelNotDownloaded` if it fails. It reports completion, not progress, so show an indeterminate indicator while it runs.
+`delete(language)` removes a model. `download` completes once the model is on the device and throws `ModelNotDownloaded` if it fails. It reports completion, not progress, so show an indeterminate indicator while it runs.
+
+On iOS, ML Kit always downloads on any network, so `wifiOnly` has no effect. It also doesn't report a failed download, so on iOS `download` fails only if the model hasn't arrived after 5 minutes.
 
 ### Measuring performance
 

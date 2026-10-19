@@ -21,7 +21,6 @@
 // Only the full photo's expectations fail the test.
 // ignore_for_file: implementation_imports, avoid_print
 
-import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
@@ -164,10 +163,8 @@ void main() {
 /// Downloads each missing model in [languages], returning how long each
 /// took in milliseconds.
 ///
-/// Completion is detected by checking for the model once a second rather
-/// than by awaiting the download: on iOS, `google_mlkit_translation` 0.15.1
-/// never completes a download's future, and reports it as failed once any
-/// other model call is made, even though the model arrives.
+/// On iOS, `TranslationModels.download` completes once the model is on the
+/// device, so awaiting it also checks the iOS download fix end to end.
 Future<Map<String, int>> _downloadModels(
   Set<TranslateLanguage> languages,
 ) async {
@@ -180,20 +177,7 @@ Future<Map<String, int>> _downloadModels(
     }
     print('Downloading ${language.name}...');
     final watch = Stopwatch()..start();
-    unawaited(
-      models
-          .download(language, wifiOnly: false)
-          .then<void>((_) {}, onError: (Object _) {}),
-    );
-    while (!await models.isDownloaded(language)) {
-      if (watch.elapsed > const Duration(minutes: 5)) {
-        throw TimeoutException(
-          "${language.name}'s model didn't arrive",
-          watch.elapsed,
-        );
-      }
-      await Future<void>.delayed(const Duration(seconds: 1));
-    }
+    await models.download(language, wifiOnly: false);
     took[language.name] = watch.elapsedMilliseconds;
     print('Downloaded ${language.name} in ${watch.elapsedMilliseconds} ms');
   }
