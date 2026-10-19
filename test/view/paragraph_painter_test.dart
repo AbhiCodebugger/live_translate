@@ -1,3 +1,5 @@
+import 'dart:ui' show PictureRecorder;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_translate/src/models/overlay_style.dart';
@@ -220,6 +222,137 @@ void main() {
           );
       expect(make().shouldRepaint(make()), isFalse);
       expect(make().shouldRepaint(make(const [])), isTrue);
+    });
+  });
+
+  group('LabelLayoutCache', () {
+    const size = Size(360, 800);
+
+    ParagraphLabel label({
+      Offset shift = Offset.zero,
+      String text = 'It has long been known that readable text distracts',
+      double lineHeight = 20,
+      Color ink = const Color(0xFF141419),
+    }) => ParagraphLabel(
+      rect: const Rect.fromLTRB(20, 100, 300, 144).shift(shift),
+      lineHeight: lineHeight,
+      text: text,
+      background: const Color(0xFFF8F8F4),
+      ink: ink,
+    );
+
+    void paint(
+      LabelLayoutCache cache,
+      List<ParagraphLabel> labels, {
+      OverlayStyle style = _style,
+      TextDirection direction = TextDirection.ltr,
+    }) {
+      final recorder = PictureRecorder();
+      ParagraphPainter(
+        labels: labels,
+        style: style,
+        textDirection: direction,
+        layoutCache: cache,
+      ).paint(Canvas(recorder), size);
+      recorder.endRecording().dispose();
+    }
+
+    test('labels that only moved are not laid out again', () {
+      final cache = LabelLayoutCache();
+      addTearDown(cache.dispose);
+      // Short enough to fit without growing, so moving keeps its size.
+      const text = 'Readable text';
+      paint(cache, [label(text: text)]);
+      final first = cache.layouts;
+      expect(first, greaterThan(0));
+      // Fractional shifts, as the camera gives, change the rect's exact
+      // width by rounding errors.
+      for (var dx = 0.1; dx <= 30; dx += 0.7) {
+        paint(cache, [label(text: text, shift: Offset(dx, dx / 3))]);
+      }
+      expect(cache.layouts, first);
+    });
+
+    test('a label grown to the edge is fitted again as its width changes', () {
+      final cache = LabelLayoutCache();
+      addTearDown(cache.dispose);
+      paint(cache, [label()]);
+      final first = cache.layouts;
+      paint(cache, [label(shift: const Offset(5, 0))]);
+      expect(cache.layouts, greaterThan(first));
+    });
+
+    test('a change to anything the layout depends on lays out again', () {
+      final cache = LabelLayoutCache();
+      addTearDown(cache.dispose);
+      paint(cache, [label()]);
+      for (final change in <void Function()>[
+        () => paint(cache, [label(text: 'Something else entirely')]),
+        () => paint(cache, [label(lineHeight: 30)]),
+        () => paint(cache, [label(ink: const Color(0xFFFFFFFF))]),
+        () => paint(cache, [
+          label(shift: const Offset(200, 0)), // narrowed by the view's edge
+        ]),
+        () => paint(cache, [
+          label(),
+        ], style: const OverlayStyle(fontWeight: FontWeight.w300)),
+        () => paint(cache, [label()], direction: TextDirection.rtl),
+      ]) {
+        final before = cache.layouts;
+        change();
+        expect(cache.layouts, greaterThan(before));
+      }
+    });
+
+    testWidgets('paints the same pixels as without a cache', (tester) async {
+      final cache = LabelLayoutCache();
+      addTearDown(cache.dispose);
+      final labels = [
+        label(),
+        label(shift: const Offset(0, 200), text: 'Platform closed'),
+      ];
+      Future<List<int>> render(LabelLayoutCache? cache) async {
+        final recorder = PictureRecorder();
+        ParagraphPainter(
+          labels: labels,
+          style: _style,
+          textDirection: TextDirection.ltr,
+          layoutCache: cache,
+        ).paint(Canvas(recorder), size);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(360, 800);
+        final bytes = await image.toByteData();
+        image.dispose();
+        picture.dispose();
+        return bytes!.buffer.asUint8List();
+      }
+
+      await tester.runAsync(() async {
+        final uncached = await render(null);
+        // Twice: once filling the cache, once from it.
+        expect(await render(cache), uncached);
+        expect(await render(cache), uncached);
+      });
+    });
+
+    test('keeps at most its capacity of laid-out translations', () {
+      final cache = LabelLayoutCache(capacity: 2);
+      addTearDown(cache.dispose);
+      for (var i = 0; i < 5; i++) {
+        paint(cache, [label(text: 'Translation number $i')]);
+      }
+      expect(cache.painterCount, 2);
+    });
+
+    test('dispose drops everything', () {
+      final cache = LabelLayoutCache();
+      paint(cache, [label()]);
+      cache.dispose();
+      expect(cache.painterCount, 0);
+      final before = cache.layouts;
+      paint(cache, [label()]);
+      expect(cache.layouts, greaterThan(before));
+      cache.dispose();
     });
   });
 

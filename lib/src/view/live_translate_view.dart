@@ -108,6 +108,7 @@ class LiveTranslateView extends StatefulWidget {
     @internal this.createSession,
     @internal this.createEngines,
     @internal this.now,
+    @internal this.elapsed,
   });
 
   /// The language lines are translated into, or `null` for the device's
@@ -190,8 +191,9 @@ class LiveTranslateView extends StatefulWidget {
   /// Whether to show a small panel of performance numbers in the top-left
   /// corner, for development: the latest read's total time and the time its
   /// stages took (recognition, translation and colour sampling), how many
-  /// paragraphs it translated, and how many camera frames the view measured
-  /// in the last second. Off by default.
+  /// paragraphs it translated, how many camera frames the view measured in
+  /// the last second, and the mean and worst time its own work took per
+  /// frame on the UI thread. Off by default.
   ///
   /// The same numbers reach code through [LiveTranslateController.metrics].
   final bool showDebugHud;
@@ -219,6 +221,13 @@ class LiveTranslateView extends StatefulWidget {
   /// For this package's tests only.
   @internal
   final DateTime Function()? now;
+
+  /// A steadily increasing clock that times the view's per-frame work for
+  /// the debug HUD. Defaults to a stopwatch.
+  ///
+  /// For this package's tests only.
+  @internal
+  final Duration Function()? elapsed;
 
   @override
   State<LiveTranslateView> createState() => _LiveTranslateViewState();
@@ -304,10 +313,14 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
 
   // The debug HUD, only while it is shown: what it displays, a timer that
   // lets the frame rate fall when frames stop, and when the live frames of
-  // the last second arrived.
+  // the last second arrived and how long the view's work on each took.
   ValueNotifier<DebugHudData>? _hud;
   Timer? _hudTimer;
-  final _frameTimes = Queue<DateTime>();
+  final _frameTimes = Queue<({DateTime at, Duration cost})>();
+  late final Duration Function() _elapsed;
+
+  // The built-in labels' text layouts, kept while they follow the camera.
+  final _labelLayouts = LabelLayoutCache();
 
   LiveTranslateState get _state {
     if (_error != null) return LiveTranslateState.error;
@@ -334,6 +347,12 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       final epoch = DateTime.now();
       final watch = Stopwatch()..start();
       _clock = () => epoch.add(watch.elapsed);
+    }
+    if (widget.elapsed case final elapsed?) {
+      _elapsed = elapsed;
+    } else {
+      final watch = Stopwatch()..start();
+      _elapsed = () => watch.elapsed;
     }
     _fade = AnimationController(
       vsync: this,
@@ -413,6 +432,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     _fade.dispose();
     _hudTimer?.cancel();
     _hud?.dispose();
+    _labelLayouts.dispose();
     unawaited(_frameSubscription?.cancel());
     unawaited(_tearDownPipeline());
     unawaited(_session.dispose());
@@ -426,14 +446,18 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
       return;
     }
     _lastFrame = frame;
-    if (_hud != null) {
-      _frameTimes.add(_clock());
-      _updateHud();
-    }
+    // The HUD times the view's own work on the frame: measuring its motion
+    // and deciding whether to read.
+    final timed = _hud != null;
+    final started = timed ? _elapsed() : Duration.zero;
     final action = _settler.onFrame(
       _estimator.measure(frame),
       frame.rotation.upright(frame.size),
     );
+    if (timed) {
+      _frameTimes.add((at: _clock(), cost: _elapsed() - started));
+      _updateHud();
+    }
     switch (action) {
       case SettleAction.read:
         _settler.readStarted();
@@ -620,7 +644,11 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
   /// Creates or drops the HUD to match [LiveTranslateView.showDebugHud].
   void _syncHud() {
     if (widget.showDebugHud && _hud == null) {
-      _hud = ValueNotifier((latest: _latestMetrics, framesPerSecond: 0));
+      _hud = ValueNotifier((
+        latest: _latestMetrics,
+        framesPerSecond: 0,
+        frameCost: null,
+      ));
       _hudTimer = Timer.periodic(
         const Duration(milliseconds: 500),
         (_) => _updateHud(),
@@ -634,15 +662,28 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
     }
   }
 
-  /// Shows the latest read and the live frames of the last second.
+  /// Shows the latest read, and the live frames of the last second and
+  /// their cost.
   void _updateHud() {
     final hud = _hud;
     if (hud == null) return;
     final since = _clock().subtract(const Duration(seconds: 1));
-    while (_frameTimes.isNotEmpty && !_frameTimes.first.isAfter(since)) {
+    while (_frameTimes.isNotEmpty && !_frameTimes.first.at.isAfter(since)) {
       _frameTimes.removeFirst();
     }
-    hud.value = (latest: _latestMetrics, framesPerSecond: _frameTimes.length);
+    var total = Duration.zero;
+    var worst = Duration.zero;
+    for (final (at: _, :cost) in _frameTimes) {
+      total += cost;
+      if (cost > worst) worst = cost;
+    }
+    hud.value = (
+      latest: _latestMetrics,
+      framesPerSecond: _frameTimes.length,
+      frameCost: _frameTimes.isEmpty
+          ? null
+          : (mean: total ~/ _frameTimes.length, worst: worst),
+    );
   }
 
   // ControllerHost: what the controller asks of the view.
@@ -971,6 +1012,7 @@ class _LiveTranslateViewState extends State<LiveTranslateView>
                     ],
                     style: widget.style,
                     textDirection: textDirectionFor(_target),
+                    layoutCache: _labelLayouts,
                   ),
                 ),
               if (_frozen && _reading)

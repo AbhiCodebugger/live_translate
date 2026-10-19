@@ -98,6 +98,46 @@ void main() {
       expect(frame.image.planes.single.bytes, hasLength(4 * 2 * 3 ~/ 2));
     });
 
+    test('scales a portrait photo to the Android stream size', () async {
+      final frame = await buildReplayFrame(
+        await _halves(960, 1280),
+        TargetPlatform.android,
+        longSide: streamLongSide(TargetPlatform.android),
+      );
+      expect(frame.image.format.raw, nv21Raw);
+      expect((frame.image.width, frame.image.height), (540, 720));
+      expect(frame.image.planes.single.bytes, hasLength(540 * 720 * 3 ~/ 2));
+    });
+
+    test('scales a portrait photo to the iOS stream size', () async {
+      final frame = await buildReplayFrame(
+        await _halves(960, 1280),
+        TargetPlatform.iOS,
+        longSide: streamLongSide(TargetPlatform.iOS),
+      );
+      expect(frame.image.format.raw, bgraRaw);
+      expect((frame.image.width, frame.image.height), (480, 640));
+      expect(frame.image.planes.single.bytesPerRow, 480 * 4);
+    });
+
+    test('scales a landscape photo by its width', () async {
+      final frame = await buildReplayFrame(
+        await _halves(1280, 960),
+        TargetPlatform.android,
+        longSide: 720,
+      );
+      expect((frame.image.width, frame.image.height), (720, 540));
+    });
+
+    test('leaves a photo already within the long side as it is', () async {
+      final frame = await buildReplayFrame(
+        await _halves(400, 300),
+        TargetPlatform.android,
+        longSide: 720,
+      );
+      expect((frame.image.width, frame.image.height), (400, 300));
+    });
+
     test('is upright', () async {
       final frame = await buildReplayFrame(
         await _halves(4, 2),

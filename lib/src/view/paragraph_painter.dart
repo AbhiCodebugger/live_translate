@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show immutable, listEquals;
+import 'package:flutter/foundation.dart'
+    show immutable, listEquals, visibleForTesting;
 import 'package:flutter/rendering.dart';
 
 import '../models/overlay_style.dart';
@@ -60,25 +61,21 @@ const paragraphFontShare = 0.8;
 /// [lineHeight], rounded down and capped at the style's maximum, shrinking
 /// one size at a time until the text fits, but not below the style's
 /// minimum.
+///
+/// [cache], when given, keeps the measurements for later calls.
 double fitParagraphFontSize({
   required String text,
   required Size inner,
   required double lineHeight,
   required OverlayStyle style,
   required TextDirection direction,
+  LabelLayoutCache? cache,
 }) {
   final start = _startSize(lineHeight, style);
   for (var size = start; size > style.minFontSize; size--) {
-    final painter = _layout(
-      text,
-      size.toDouble(),
-      const Color(0xFF000000),
-      style,
-      direction,
-    )..layout(maxWidth: inner.width);
-    final fits = painter.height <= inner.height && !painter.didExceedMaxLines;
-    painter.dispose();
-    if (fits) return size.toDouble();
+    if (_fits(text, size.toDouble(), inner, style, direction, cache)) {
+      return size.toDouble();
+    }
   }
   return style.minFontSize;
 }
@@ -90,12 +87,114 @@ bool _fits(
   Size inner,
   OverlayStyle style,
   TextDirection direction,
+  LabelLayoutCache? cache,
+) => _height(text, size, inner.width, style, direction, cache) <= inner.height;
+
+/// [width] rounded to a hundredth of a pixel, the width text is laid out
+/// at. A label that only moves keeps exactly the same layout width, though
+/// the view's scaling can change its exact width by a rounding error.
+double _layoutWidth(double width) =>
+    width.isFinite ? (width * 100).roundToDouble() / 100 : width;
+
+/// The height of [text] at font [size] wrapped at [maxWidth], from [cache]
+/// when it has it.
+double _height(
+  String text,
+  double size,
+  double maxWidth,
+  OverlayStyle style,
+  TextDirection direction,
+  LabelLayoutCache? cache,
 ) {
-  final painter = _layout(text, size, const Color(0xFF000000), style, direction)
-    ..layout(maxWidth: inner.width);
-  final fits = painter.height <= inner.height;
-  painter.dispose();
-  return fits;
+  final width = _layoutWidth(maxWidth);
+  double measure() {
+    final painter = _layout(
+      text,
+      size,
+      const Color(0xFF000000),
+      style,
+      direction,
+    )..layout(maxWidth: width);
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  return cache == null
+      ? measure()
+      : cache._height((text, size, width, style, direction), measure);
+}
+
+/// Keeps the text layouts of labels from one paint to the next, so labels
+/// that only move with the camera aren't fitted and laid out again.
+///
+/// It holds the measurements made while fitting, and the last [capacity]
+/// laid-out translations, which it disposes when it drops them. Call
+/// [dispose] when the labels are gone for good.
+final class LabelLayoutCache {
+  /// Creates a cache keeping up to [capacity] laid-out translations.
+  LabelLayoutCache({this.capacity = 64});
+
+  /// How many laid-out translations are kept.
+  final int capacity;
+
+  // Both in least recently used order, as map literals keep insertion
+  // order.
+  final _heights =
+      <(String, double, double, OverlayStyle, TextDirection), double>{};
+  final _painters =
+      <
+        (String, double, Color, int, double, OverlayStyle, TextDirection),
+        TextPainter
+      >{};
+
+  /// How many text layouts the cache has made, for tests.
+  @visibleForTesting
+  int layouts = 0;
+
+  /// How many laid-out translations the cache holds, for tests.
+  @visibleForTesting
+  int get painterCount => _painters.length;
+
+  double _height(
+    (String, double, double, OverlayStyle, TextDirection) key,
+    double Function() measure,
+  ) {
+    var height = _heights.remove(key);
+    if (height == null) {
+      layouts++;
+      height = measure();
+    }
+    _heights[key] = height;
+    // Measurements are small; keep several per translation.
+    if (_heights.length > capacity * 8) _heights.remove(_heights.keys.first);
+    return height;
+  }
+
+  TextPainter _painter(
+    (String, double, Color, int, double, OverlayStyle, TextDirection) key,
+    TextPainter Function() layOut,
+  ) {
+    var painter = _painters.remove(key);
+    if (painter == null) {
+      layouts++;
+      painter = layOut();
+    }
+    _painters[key] = painter;
+    if (_painters.length > capacity) {
+      _painters.remove(_painters.keys.first)!.dispose();
+    }
+    return painter;
+  }
+
+  /// Disposes every laid-out translation and forgets every measurement.
+  void dispose() {
+    for (final painter in _painters.values) {
+      painter.dispose();
+    }
+    _painters.clear();
+    _heights.clear();
+  }
 }
 
 /// The font size a label's translation starts at: 80% of its line height,
@@ -117,17 +216,20 @@ int _startSize(double lineHeight, OverlayStyle style) => math.max(
 /// downwards by up to its own height, stopping at the nearest label below
 /// and the view's bottom. Labels grow against the others' original
 /// rectangles, so two labels never grow into each other.
+///
+/// [cache], when given, keeps the measurements for later calls.
 List<Rect> placeParagraphLabels(
   List<ParagraphLabel> labels,
   Size viewSize, {
   required OverlayStyle style,
   required TextDirection direction,
+  LabelLayoutCache? cache,
 }) {
   final view = Offset.zero & viewSize;
   final original = [for (final label in labels) label.rect.intersect(view)];
   return [
     for (final (i, label) in labels.indexed)
-      _grow(i, label, original, view, style, direction),
+      _grow(i, label, original, view, style, direction, cache),
   ];
 }
 
@@ -138,11 +240,12 @@ Rect _grow(
   Rect view,
   OverlayStyle style,
   TextDirection direction,
+  LabelLayoutCache? cache,
 ) {
   var rect = original[index];
   if (rect.isEmpty) return rect;
   final size = _startSize(label.lineHeight, style).toDouble();
-  bool fits(Rect r) => _fits(label.text, size, r.size, style, direction);
+  bool fits(Rect r) => _fits(label.text, size, r.size, style, direction, cache);
   if (fits(rect)) return rect;
 
   final others = [
@@ -187,10 +290,14 @@ TextPainter _layout(
 /// page colour and lays the translation out across it.
 class ParagraphPainter extends CustomPainter {
   /// Creates a painter for [labels].
+  ///
+  /// [layoutCache], when given, keeps text layouts between paints; its
+  /// owner disposes it.
   ParagraphPainter({
     required this.labels,
     required this.style,
     required this.textDirection,
+    this.layoutCache,
   });
 
   /// The paragraphs to draw.
@@ -203,15 +310,20 @@ class ParagraphPainter extends CustomPainter {
   /// The translations' direction.
   final TextDirection textDirection;
 
+  /// Keeps text layouts between paints, or `null` to lay out every time.
+  final LabelLayoutCache? layoutCache;
+
   @override
   void paint(Canvas canvas, Size size) {
     final radius = Radius.circular(style.borderRadius);
     final view = Offset.zero & size;
+    final cache = layoutCache;
     final placed = placeParagraphLabels(
       labels,
       size,
       style: style,
       direction: textDirection,
+      cache: cache,
     );
     for (final (i, label) in labels.indexed) {
       final inner = placed[i];
@@ -230,21 +342,43 @@ class ParagraphPainter extends CustomPainter {
         lineHeight: label.lineHeight,
         style: style,
         direction: textDirection,
+        cache: cache,
       );
-      final probe = _layout('M', fontSize, ink, style, textDirection)..layout();
-      final maxLines = math.max(1, (inner.height / probe.height).floor());
-      probe.dispose();
-      final text = _layout(
+      final lineHeight = _height(
+        'M',
+        fontSize,
+        double.infinity,
+        style,
+        textDirection,
+        cache,
+      );
+      final maxLines = math.max(1, (inner.height / lineHeight).floor());
+      final width = _layoutWidth(inner.width);
+      TextPainter layOut() => _layout(
         label.text,
         fontSize,
         ink,
         style,
         textDirection,
         maxLines: maxLines,
-      )..layout(maxWidth: inner.width);
-      text
-        ..paint(canvas, inner.topLeft)
-        ..dispose();
+      )..layout(maxWidth: width);
+      if (cache == null) {
+        layOut()
+          ..paint(canvas, inner.topLeft)
+          ..dispose();
+      } else {
+        cache
+            ._painter((
+              label.text,
+              fontSize,
+              ink,
+              maxLines,
+              width,
+              style,
+              textDirection,
+            ), layOut)
+            .paint(canvas, inner.topLeft);
+      }
     }
   }
 

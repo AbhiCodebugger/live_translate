@@ -1,3 +1,11 @@
+## Unreleased
+
+* The debug HUD shows the view's own work per camera frame, as `N fps · frame A.A ms avg, W.W max`: measuring how the picture moved and deciding whether to read, over the last second.
+* Labels repaint faster while the camera moves: their text layouts are kept between frames instead of being measured again (about 2.6× faster on the host benchmark). Picking up the page's colours is about 20% faster. Neither changes what's drawn.
+* README: reorganised, with badges, a contents list and an API section covering every parameter of `LiveTranslateView`, `LiveTranslateController`, `TranslatedParagraph` and `OverlayStyle`.
+* README: new Performance section with read times, frame cost, jank and memory on a Samsung Galaxy M17 and an iPhone 14, and how to measure them; new Size impact section, with `tool/size_impact.sh` to measure it again.
+* README: Latin-only Android apps need `-dontwarn com.google.mlkit.vision.text.devanagari.**` in `proguard-rules.pro`, or release builds fail in R8.
+
 ## 0.2.1
 
 Docs only; no code changes.

@@ -2,6 +2,7 @@
 // the package's internal pipeline.
 // ignore_for_file: implementation_imports
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -20,16 +21,36 @@ const nv21Raw = 17;
 /// iOS's `kCVPixelFormatType_32BGRA`.
 const bgraRaw = 1111970369;
 
+/// The long side of the frames [platform]'s camera streams at
+/// `ResolutionPreset.medium`: 720 × 480 on Android, 640 × 480 on iOS.
+int streamLongSide(TargetPlatform platform) =>
+    platform == TargetPlatform.android ? 720 : 640;
+
 /// Decodes [encoded] (a JPEG or PNG) and returns it as an upright camera
 /// frame in the format [platform]'s camera streams: NV21 on Android, BGRA
 /// on iOS. Odd widths and heights lose their last column or row, as NV21
 /// pairs pixels in 2 × 2 blocks.
+///
+/// With [longSide], a larger photo is first scaled down, keeping its
+/// shape, so its long side is [longSide] pixels.
 Future<CameraFrame> buildReplayFrame(
   Uint8List encoded,
-  TargetPlatform platform,
-) async {
-  final codec = await ui.instantiateImageCodec(encoded);
-  final image = (await codec.getNextFrame()).image;
+  TargetPlatform platform, {
+  int? longSide,
+}) async {
+  var codec = await ui.instantiateImageCodec(encoded);
+  var image = (await codec.getNextFrame()).image;
+  if (longSide != null && math.max(image.width, image.height) > longSide) {
+    final portrait = image.height > image.width;
+    image.dispose();
+    codec.dispose();
+    codec = await ui.instantiateImageCodec(
+      encoded,
+      targetWidth: portrait ? null : longSide,
+      targetHeight: portrait ? longSide : null,
+    );
+    image = (await codec.getNextFrame()).image;
+  }
   final rgba = (await image.toByteData(
     format: ui.ImageByteFormat.rawRgba,
   ))!.buffer.asUint8List();

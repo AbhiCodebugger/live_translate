@@ -1,0 +1,648 @@
+{
+  "platform": "android",
+  "os": "BP4A.251205.006.M176BXXS8CZI9",
+  "modelDownloadsMs": {
+    "hindi": 65241,
+    "spanish": 6322,
+    "french": 5969,
+    "german": 5907
+  },
+  "warmReads": 5,
+  "frames": [
+    {
+      "file": "hi_exit.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 267,
+        "translationMs": 245,
+        "samplingMs": 0,
+        "totalMs": 513
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 95,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 99
+        },
+        "max": {
+          "recognitionMs": 194,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 197
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 45,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 47
+        },
+        "max": {
+          "recognitionMs": 68,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 70
+        },
+        "passed": true,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "hi_no_smoking.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 209,
+        "translationMs": 174,
+        "samplingMs": 0,
+        "totalMs": 384
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 107,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 109
+        },
+        "max": {
+          "recognitionMs": 113,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 114
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 58,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 59
+        },
+        "max": {
+          "recognitionMs": 74,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 75
+        },
+        "passed": true,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "hi_notice.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 231,
+        "translationMs": 178,
+        "samplingMs": 0,
+        "totalMs": 410
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 142,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 145
+        },
+        "max": {
+          "recognitionMs": 151,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 153
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 88,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 91
+        },
+        "max": {
+          "recognitionMs": 130,
+          "translationMs": 64,
+          "samplingMs": 0,
+          "totalMs": 195
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "hi_caution.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 202,
+        "translationMs": 162,
+        "samplingMs": 0,
+        "totalMs": 364
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 124,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 125
+        },
+        "max": {
+          "recognitionMs": 133,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 135
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 70,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 72
+        },
+        "max": {
+          "recognitionMs": 92,
+          "translationMs": 288,
+          "samplingMs": 0,
+          "totalMs": 381
+        },
+        "passed": false,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "mr_no_parking.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 239,
+        "translationMs": 253,
+        "samplingMs": 0,
+        "totalMs": 493
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 145,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 148
+        },
+        "max": {
+          "recognitionMs": 150,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 154
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 76,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 78
+        },
+        "max": {
+          "recognitionMs": 120,
+          "translationMs": 49,
+          "samplingMs": 0,
+          "totalMs": 170
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "mixed_station.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 210,
+        "translationMs": 165,
+        "samplingMs": 0,
+        "totalMs": 376
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 133,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 136
+        },
+        "max": {
+          "recognitionMs": 142,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 144
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 81,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 83
+        },
+        "max": {
+          "recognitionMs": 106,
+          "translationMs": 3,
+          "samplingMs": 0,
+          "totalMs": 109
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "mixed_shop.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 217,
+        "translationMs": 196,
+        "samplingMs": 0,
+        "totalMs": 414
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 141,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 143
+        },
+        "max": {
+          "recognitionMs": 154,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 157
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 96,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 99
+        },
+        "max": {
+          "recognitionMs": 124,
+          "translationMs": 3,
+          "samplingMs": 0,
+          "totalMs": 127
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "es_menu_lunch.jpg",
+      "passed": true,
+      "paragraphs": 5,
+      "cold": {
+        "recognitionMs": 122,
+        "translationMs": 230,
+        "samplingMs": 1,
+        "totalMs": 354
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 80,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 85
+        },
+        "max": {
+          "recognitionMs": 84,
+          "translationMs": 3,
+          "samplingMs": 1,
+          "totalMs": 88
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 67,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 72
+        },
+        "max": {
+          "recognitionMs": 78,
+          "translationMs": 3,
+          "samplingMs": 1,
+          "totalMs": 82
+        },
+        "passed": true,
+        "paragraphs": 5
+      }
+    },
+    {
+      "file": "es_menu_breakfast.jpg",
+      "passed": true,
+      "paragraphs": 4,
+      "cold": {
+        "recognitionMs": 118,
+        "translationMs": 189,
+        "samplingMs": 1,
+        "totalMs": 309
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 78,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 81
+        },
+        "max": {
+          "recognitionMs": 80,
+          "translationMs": 3,
+          "samplingMs": 1,
+          "totalMs": 84
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 57,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 61
+        },
+        "max": {
+          "recognitionMs": 59,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 63
+        },
+        "passed": true,
+        "paragraphs": 4
+      }
+    },
+    {
+      "file": "fr_station.jpg",
+      "passed": true,
+      "paragraphs": 4,
+      "cold": {
+        "recognitionMs": 162,
+        "translationMs": 239,
+        "samplingMs": 1,
+        "totalMs": 402
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 109,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 113
+        },
+        "max": {
+          "recognitionMs": 114,
+          "translationMs": 3,
+          "samplingMs": 1,
+          "totalMs": 118
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 85,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 89
+        },
+        "max": {
+          "recognitionMs": 93,
+          "translationMs": 145,
+          "samplingMs": 0,
+          "totalMs": 240
+        },
+        "passed": false,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "fr_library.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 145,
+        "translationMs": 295,
+        "samplingMs": 0,
+        "totalMs": 441
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 111,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 116
+        },
+        "max": {
+          "recognitionMs": 123,
+          "translationMs": 3,
+          "samplingMs": 0,
+          "totalMs": 126
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 83,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 86
+        },
+        "max": {
+          "recognitionMs": 96,
+          "translationMs": 148,
+          "samplingMs": 0,
+          "totalMs": 245
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "de_wet_paint.jpg",
+      "passed": true,
+      "paragraphs": 5,
+      "cold": {
+        "recognitionMs": 123,
+        "translationMs": 169,
+        "samplingMs": 1,
+        "totalMs": 294
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 79,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 83
+        },
+        "max": {
+          "recognitionMs": 84,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 88
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 48,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 52
+        },
+        "max": {
+          "recognitionMs": 55,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 59
+        },
+        "passed": true,
+        "paragraphs": 5
+      }
+    },
+    {
+      "file": "en_garden.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 145,
+        "translationMs": 324,
+        "samplingMs": 0,
+        "totalMs": 470
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 97,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 99
+        },
+        "max": {
+          "recognitionMs": 109,
+          "translationMs": 3,
+          "samplingMs": 0,
+          "totalMs": 111
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 72,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 75
+        },
+        "max": {
+          "recognitionMs": 81,
+          "translationMs": 102,
+          "samplingMs": 0,
+          "totalMs": 184
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "es_emergency_dark.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 115,
+        "translationMs": 133,
+        "samplingMs": 0,
+        "totalMs": 249
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 73,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 76
+        },
+        "max": {
+          "recognitionMs": 83,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 86
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 45,
+          "translationMs": 2,
+          "samplingMs": 0,
+          "totalMs": 48
+        },
+        "max": {
+          "recognitionMs": 52,
+          "translationMs": 2,
+          "samplingMs": 1,
+          "totalMs": 55
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "hi_notice_dim.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 228,
+        "translationMs": 215,
+        "samplingMs": 0,
+        "totalMs": 444
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 147,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 149
+        },
+        "max": {
+          "recognitionMs": 156,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 158
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 83,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 85
+        },
+        "max": {
+          "recognitionMs": 112,
+          "translationMs": 1,
+          "samplingMs": 0,
+          "totalMs": 114
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    }
+  ],
+  "summary": {
+    "cold": {
+      "recognitionMs": 202,
+      "translationMs": 196,
+      "samplingMs": 0,
+      "totalMs": 402
+    },
+    "warm": {
+      "recognitionMs": 109,
+      "translationMs": 2,
+      "samplingMs": 0,
+      "totalMs": 113
+    },
+    "stream": {
+      "recognitionMs": 72,
+      "translationMs": 2,
+      "samplingMs": 0,
+      "totalMs": 75
+    }
+  }
+}

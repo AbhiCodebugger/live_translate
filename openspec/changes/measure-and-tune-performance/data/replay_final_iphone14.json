@@ -1,0 +1,653 @@
+{
+  "platform": "iOS",
+  "os": "Version 26.6.1 (Build 23G83)",
+  "modelDownloadsMs": {
+    "hindi": 4038,
+    "marathi": 4035,
+    "spanish": 4033,
+    "french": 4033,
+    "german": 4033
+  },
+  "warmReads": 5,
+  "frames": [
+    {
+      "file": "hi_exit.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 112,
+        "translationMs": 153,
+        "samplingMs": 0,
+        "totalMs": 265
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 40,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 41
+        },
+        "max": {
+          "recognitionMs": 45,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 45
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 35,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 35
+        },
+        "max": {
+          "recognitionMs": 37,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 37
+        },
+        "passed": true,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "hi_no_smoking.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 43,
+        "translationMs": 59,
+        "samplingMs": 0,
+        "totalMs": 102
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 40,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 41
+        },
+        "max": {
+          "recognitionMs": 43,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 36,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 37
+        },
+        "max": {
+          "recognitionMs": 40,
+          "translationMs": 10,
+          "samplingMs": 0,
+          "totalMs": 45
+        },
+        "passed": false,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "hi_notice.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 52,
+        "translationMs": 65,
+        "samplingMs": 0,
+        "totalMs": 118
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 48,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 48
+        },
+        "max": {
+          "recognitionMs": 49,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 49
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        },
+        "max": {
+          "recognitionMs": 43,
+          "translationMs": 11,
+          "samplingMs": 0,
+          "totalMs": 54
+        },
+        "passed": false,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "hi_caution.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 46,
+        "translationMs": 48,
+        "samplingMs": 0,
+        "totalMs": 94
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 43,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 44
+        },
+        "max": {
+          "recognitionMs": 44,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 44
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 40,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 40
+        },
+        "max": {
+          "recognitionMs": 40,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 40
+        },
+        "passed": true,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "mr_no_parking.jpg",
+      "passed": false,
+      "failure": "mr_no_parking.jpg (Blue Marathi no-parking sign): not found:\n  - \"वाहन\" [mr] → any of [vehicle, park]\nread 3 paragraphs:\n  - \"कृपया येथे बाहन उभे करू नये\" [mr] → \"Please should not stand out at\"\n  - \"नियम मोडल्यास दंड आकारला\" [mr] → \"Penalized if the rules break\"\n  - \"जाईल\" [mr] → \"Will be\"",
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 57,
+        "translationMs": 103,
+        "samplingMs": 0,
+        "totalMs": 161
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 53,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 54
+        },
+        "max": {
+          "recognitionMs": 54,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 55
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 45,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 47
+        },
+        "max": {
+          "recognitionMs": 46,
+          "translationMs": 9,
+          "samplingMs": 0,
+          "totalMs": 55
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "mixed_station.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 47,
+        "translationMs": 48,
+        "samplingMs": 0,
+        "totalMs": 96
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 47,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 48
+        },
+        "max": {
+          "recognitionMs": 48,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 48
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 42
+        },
+        "max": {
+          "recognitionMs": 43,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        },
+        "passed": false,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "mixed_shop.jpg",
+      "passed": false,
+      "failure": "mixed_shop.jpg (Medical store boards, Hindi above English): not found:\n  - \"दवा की दुकान\" [hi] → any of [medicine, medical, pharmacy, drug]\nread 3 paragraphs:\n  - \"दवा की दुरकान\" [hi] → \"Drug\"\n  - \"सुबह 9 बजे से रात 10 बजे\" [hi] → \"From 9 am to 10 o'clock\"\n  - \"तक\" [hi] → \"Till\"",
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 51,
+        "translationMs": 59,
+        "samplingMs": 0,
+        "totalMs": 111
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 50,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 50
+        },
+        "max": {
+          "recognitionMs": 51,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 52
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 47,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 48
+        },
+        "max": {
+          "recognitionMs": 48,
+          "translationMs": 5,
+          "samplingMs": 0,
+          "totalMs": 52
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "es_menu_lunch.jpg",
+      "passed": true,
+      "paragraphs": 5,
+      "cold": {
+        "recognitionMs": 26,
+        "translationMs": 109,
+        "samplingMs": 0,
+        "totalMs": 137
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 23,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 24
+        },
+        "max": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 26
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "max": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "passed": true,
+        "paragraphs": 4
+      }
+    },
+    {
+      "file": "es_menu_breakfast.jpg",
+      "passed": true,
+      "paragraphs": 4,
+      "cold": {
+        "recognitionMs": 23,
+        "translationMs": 56,
+        "samplingMs": 0,
+        "totalMs": 81
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 23,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 24
+        },
+        "max": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 25
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "max": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 22
+        },
+        "passed": true,
+        "paragraphs": 4
+      }
+    },
+    {
+      "file": "fr_station.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 29,
+        "translationMs": 118,
+        "samplingMs": 0,
+        "totalMs": 148
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 27,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 27
+        },
+        "max": {
+          "recognitionMs": 29,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 30
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 24
+        },
+        "max": {
+          "recognitionMs": 24,
+          "translationMs": 46,
+          "samplingMs": 0,
+          "totalMs": 71
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "fr_library.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 34,
+        "translationMs": 92,
+        "samplingMs": 0,
+        "totalMs": 127
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 32,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 33
+        },
+        "max": {
+          "recognitionMs": 39,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 40
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 26,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 26
+        },
+        "max": {
+          "recognitionMs": 28,
+          "translationMs": 19,
+          "samplingMs": 0,
+          "totalMs": 46
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "de_wet_paint.jpg",
+      "passed": false,
+      "failure": "de_wet_paint.jpg (Yellow German wet-paint sign): not found:\n  - \"gestrichen\" [de] → any of [paint]\nread 2 paragraphs:\n  - \"Achtung! Frisch gestrichen Bitte nicht berühren. Die Farbe ist noch\" [de] → \"Attention! Freshly deleted please do not touch. The color is still\"\n  - \"nicht trocken.\" [de] → \"Not dry.\"",
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 26,
+        "translationMs": 97,
+        "samplingMs": 0,
+        "totalMs": 124
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 25,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 25
+        },
+        "max": {
+          "recognitionMs": 26,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 26
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "max": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 22
+        },
+        "passed": false,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "en_garden.jpg",
+      "passed": false,
+      "failure": "en_garden.jpg (English garden rules, translated into Hindi): not found:\n  - \"dogs must be kept\" [en] → any of [कुत्त]\nread 6 paragraphs:\n  - \"Visitors are welcome in the garden from Sunrise to sunset Please keep to the paths and do not pick the flowers.\" [en] → \"सूर्योदय से सूर्यास्त तक बगीचे में आगंतुकों का स्वागत है कृपया पथों को रखें और फूलों को न चुनें।\"\n  - \"Dogs\" [en] → \"कुत्तों\"\n  - \"be kept on a lead at all times.\" [en] → \"हर समय एक नेतृत्व पर रखा जाना।\"\n  - \"the lake is\" [en] → \"झील है\"\n  - \"The\" [en] → \"0\"\n  - \"open every day except\" [en] → \"छोड़कर हर दिन खुला\"",
+      "paragraphs": 6,
+      "cold": {
+        "recognitionMs": 29,
+        "translationMs": 147,
+        "samplingMs": 0,
+        "totalMs": 177
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 27,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 29
+        },
+        "max": {
+          "recognitionMs": 28,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 30
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 23,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 25
+        },
+        "max": {
+          "recognitionMs": 23,
+          "translationMs": 31,
+          "samplingMs": 1,
+          "totalMs": 56
+        },
+        "passed": false,
+        "paragraphs": 7
+      }
+    },
+    {
+      "file": "es_emergency_dark.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 25,
+        "translationMs": 34,
+        "samplingMs": 0,
+        "totalMs": 59
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 25,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 26
+        },
+        "max": {
+          "recognitionMs": 26,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 26
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "max": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "hi_notice_dim.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 58,
+        "translationMs": 65,
+        "samplingMs": 0,
+        "totalMs": 124
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 58,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 59
+        },
+        "max": {
+          "recognitionMs": 59,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 59
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 50,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 51
+        },
+        "max": {
+          "recognitionMs": 51,
+          "translationMs": 19,
+          "samplingMs": 0,
+          "totalMs": 68
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    }
+  ],
+  "summary": {
+    "cold": {
+      "recognitionMs": 43,
+      "translationMs": 65,
+      "samplingMs": 0,
+      "totalMs": 124
+    },
+    "warm": {
+      "recognitionMs": 40,
+      "translationMs": 0,
+      "samplingMs": 0,
+      "totalMs": 41
+    },
+    "stream": {
+      "recognitionMs": 35,
+      "translationMs": 0,
+      "samplingMs": 0,
+      "totalMs": 35
+    }
+  }
+}

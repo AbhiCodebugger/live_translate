@@ -135,6 +135,7 @@ void main() {
     ValueChanged<List<TranslatedParagraph>>? onFrozen,
     WidgetBuilder? placeholderBuilder,
     bool showDebugHud = false,
+    Duration Function()? elapsed,
   }) => MaterialApp(
     home: LiveTranslateView(
       targetLanguage: deviceTarget ? null : target,
@@ -151,6 +152,7 @@ void main() {
       createSession: (_) => session,
       createEngines: engines.build,
       now: () => clock,
+      elapsed: elapsed,
     ),
   );
 
@@ -2056,7 +2058,81 @@ void main() {
       await pumpView(tester, app(showDebugHud: true));
       await deliver(tester);
       expect(hudText(tester), startsWith('no read yet\n'));
-      expect(hudText(tester), endsWith(' fps'));
+      expect(
+        hudText(tester),
+        matches(r' fps · frame \d+\.\d ms avg, \d+\.\d max$'),
+      );
+    });
+
+    /// A clock for the per-frame work that the view reads twice a frame,
+    /// at the start and the end of its work: each frame takes the next of
+    /// [costs]. Counts its reads in [reads].
+    Duration Function() frameClock(List<Duration> costs, List<int> reads) {
+      var now = Duration.zero;
+      var calls = 0;
+      return () {
+        reads[0]++;
+        final call = calls++;
+        if (call.isOdd) now += costs[(call ~/ 2) % costs.length];
+        return now;
+      };
+    }
+
+    testWidgets('shows the mean and worst frame cost of the last second', (
+      tester,
+    ) async {
+      final reads = [0];
+      await pumpView(
+        tester,
+        app(
+          showDebugHud: true,
+          elapsed: frameClock([
+            for (var i = 0; i < 29; i++) const Duration(milliseconds: 2),
+            const Duration(microseconds: 6500),
+          ], reads),
+        ),
+      );
+      // 30 frames 33 ms apart fill the last second.
+      for (var i = 0; i < 30; i++) {
+        await deliver(tester);
+      }
+      expect(hudText(tester), endsWith(' fps · frame 2.2 ms avg, 6.5 max'));
+      expect(reads.single, 60);
+    });
+
+    testWidgets('shows no frame cost without live frames', (tester) async {
+      final controller = LiveTranslateController();
+      addTearDown(controller.dispose);
+      await pumpView(
+        tester,
+        app(
+          controller: controller,
+          showDebugHud: true,
+          elapsed: frameClock([const Duration(milliseconds: 2)], [0]),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await deliver(tester);
+      }
+      expect(hudText(tester), contains('frame 2.0 ms avg'));
+      await controller.freeze();
+      await tester.pump();
+      clock = clock.add(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(hudText(tester), endsWith('0 fps'));
+      expect(hudText(tester), isNot(contains('frame')));
+    });
+
+    testWidgets("doesn't time frames with the HUD off", (tester) async {
+      final reads = [0];
+      await pumpView(
+        tester,
+        app(elapsed: frameClock([const Duration(milliseconds: 2)], reads)),
+      );
+      for (var i = 0; i < 30; i++) {
+        await deliver(tester);
+      }
+      expect(reads.single, 0);
     });
 
     testWidgets("shows the latest read's times, without a controller", (

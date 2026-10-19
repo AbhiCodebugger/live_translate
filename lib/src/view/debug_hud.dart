@@ -3,9 +3,14 @@ import 'package:flutter/widgets.dart';
 
 import '../pipeline/pipeline_metrics.dart';
 
-/// What the debug HUD shows: the latest shown read, if any, and how many
-/// live frames the view measured in the last second.
-typedef DebugHudData = ({PipelineMetrics? latest, int framesPerSecond});
+/// What the debug HUD shows: the latest shown read, if any, how many live
+/// frames the view measured in the last second, and the mean and worst time
+/// the view's own work took on them (`null` with no frames).
+typedef DebugHudData = ({
+  PipelineMetrics? latest,
+  int framesPerSecond,
+  ({Duration mean, Duration worst})? frameCost,
+});
 
 /// A small panel of the latest read's timings and the frame rate, drawn in
 /// the top-left corner, clear of the system's status bar and notches. It
@@ -19,7 +24,11 @@ class DebugHud extends StatelessWidget {
 
   /// The HUD's lines for [data].
   static List<String> linesFor(DebugHudData data) {
-    final fps = '${data.framesPerSecond} fps';
+    final cost = data.frameCost;
+    final fps = cost == null
+        ? '${data.framesPerSecond} fps'
+        : '${data.framesPerSecond} fps · frame ${_ms(cost.mean)} ms avg, '
+              '${_ms(cost.worst)} max';
     final latest = data.latest;
     if (latest == null) return ['no read yet', fps];
     final count = latest.paragraphs;
@@ -31,6 +40,12 @@ class DebugHud extends StatelessWidget {
           'colours ${latest.sampling.inMilliseconds}',
       '$count ${count == 1 ? 'paragraph' : 'paragraphs'} · $fps',
     ];
+  }
+
+  /// [time] in milliseconds with one decimal, rounded to the nearest tenth.
+  static String _ms(Duration time) {
+    final tenths = (time.inMicroseconds / 100).round();
+    return '${tenths ~/ 10}.${tenths % 10}';
   }
 
   @override

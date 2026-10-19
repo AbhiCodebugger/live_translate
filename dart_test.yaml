@@ -2,3 +2,8 @@ tags:
   # Pixel comparisons against images recorded on macOS. CI runs them on its
   # macOS runner only, since Linux anti-aliases edges and text differently.
   golden:
+  # Host micro-benchmarks of the hot paths, for before/after comparisons on
+  # one machine. Run them with:
+  #   flutter test --tags benchmark --run-skipped
+  benchmark:
+    skip: "Benchmarks run only with: flutter test --tags benchmark --run-skipped"

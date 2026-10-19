@@ -151,10 +151,10 @@ _Rgb _nv21(Uint8List bytes, int stride, int height, int x, int y) {
 }
 
 final class _Rgb {
-  const _Rgb(this.r, this.g, this.b);
+  _Rgb(this.r, this.g, this.b);
 
-  static const black = _Rgb(0, 0, 0);
-  static const white = _Rgb(255, 255, 255);
+  static final black = _Rgb(0, 0, 0);
+  static final white = _Rgb(255, 255, 255);
 
   final int r;
   final int g;
@@ -162,8 +162,9 @@ final class _Rgb {
 
   int get bucket => (r >> 4) << 8 | (g >> 4) << 4 | b >> 4;
 
-  /// WCAG relative luminance, from 0 (black) to 1 (white).
-  double get luminance =>
+  /// WCAG relative luminance, from 0 (black) to 1 (white). Computed once,
+  /// as sorting the samples compares it many times.
+  late final double luminance =
       0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b);
 
   Color get colour => Color.fromARGB(0xFF, r, g, b);

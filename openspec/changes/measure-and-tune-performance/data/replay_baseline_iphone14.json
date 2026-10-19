@@ -1,0 +1,649 @@
+{
+  "platform": "iOS",
+  "os": "Version 26.6.1 (Build 23G83)",
+  "modelDownloadsMs": {
+    "hindi": 4038,
+    "marathi": 5035,
+    "spanish": 4032,
+    "french": 4033,
+    "german": 11077
+  },
+  "warmReads": 5,
+  "frames": [
+    {
+      "file": "hi_exit.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 111,
+        "translationMs": 151,
+        "samplingMs": 0,
+        "totalMs": 262
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 40,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 41
+        },
+        "max": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 34,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 35
+        },
+        "max": {
+          "recognitionMs": 35,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 36
+        },
+        "passed": true,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "hi_no_smoking.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 43,
+        "translationMs": 58,
+        "samplingMs": 0,
+        "totalMs": 102
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 41,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 42
+        },
+        "max": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 35,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 36
+        },
+        "max": {
+          "recognitionMs": 35,
+          "translationMs": 9,
+          "samplingMs": 0,
+          "totalMs": 45
+        },
+        "passed": false,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "hi_notice.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 49,
+        "translationMs": 63,
+        "samplingMs": 1,
+        "totalMs": 114
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 47,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 49
+        },
+        "max": {
+          "recognitionMs": 65,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 66
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 44
+        },
+        "max": {
+          "recognitionMs": 42,
+          "translationMs": 11,
+          "samplingMs": 1,
+          "totalMs": 55
+        },
+        "passed": false,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "hi_caution.jpg",
+      "passed": true,
+      "paragraphs": 1,
+      "cold": {
+        "recognitionMs": 45,
+        "translationMs": 49,
+        "samplingMs": 0,
+        "totalMs": 95
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 43,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 44
+        },
+        "max": {
+          "recognitionMs": 47,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 48
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 39,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 40
+        },
+        "max": {
+          "recognitionMs": 40,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 41
+        },
+        "passed": true,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "mr_no_parking.jpg",
+      "passed": false,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 56,
+        "translationMs": 103,
+        "samplingMs": 1,
+        "totalMs": 161
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 54,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 55
+        },
+        "max": {
+          "recognitionMs": 55,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 56
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 45,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 47
+        },
+        "max": {
+          "recognitionMs": 45,
+          "translationMs": 9,
+          "samplingMs": 1,
+          "totalMs": 55
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "mixed_station.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 47,
+        "translationMs": 47,
+        "samplingMs": 1,
+        "totalMs": 95
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 46,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 48
+        },
+        "max": {
+          "recognitionMs": 48,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 49
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        },
+        "max": {
+          "recognitionMs": 42,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 43
+        },
+        "passed": false,
+        "paragraphs": 1
+      }
+    },
+    {
+      "file": "mixed_shop.jpg",
+      "passed": false,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 52,
+        "translationMs": 60,
+        "samplingMs": 1,
+        "totalMs": 114
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 49,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 51
+        },
+        "max": {
+          "recognitionMs": 51,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 53
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 46,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 48
+        },
+        "max": {
+          "recognitionMs": 46,
+          "translationMs": 6,
+          "samplingMs": 1,
+          "totalMs": 54
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "es_menu_lunch.jpg",
+      "passed": true,
+      "paragraphs": 5,
+      "cold": {
+        "recognitionMs": 25,
+        "translationMs": 100,
+        "samplingMs": 2,
+        "totalMs": 129
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 24
+        },
+        "max": {
+          "recognitionMs": 22,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 25
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 19,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 22
+        },
+        "max": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 22
+        },
+        "passed": true,
+        "paragraphs": 4
+      }
+    },
+    {
+      "file": "es_menu_breakfast.jpg",
+      "passed": true,
+      "paragraphs": 4,
+      "cold": {
+        "recognitionMs": 21,
+        "translationMs": 52,
+        "samplingMs": 1,
+        "totalMs": 76
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 23
+        },
+        "max": {
+          "recognitionMs": 22,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 24
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 19,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 21
+        },
+        "max": {
+          "recognitionMs": 19,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 22
+        },
+        "passed": true,
+        "paragraphs": 4
+      }
+    },
+    {
+      "file": "fr_station.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 27,
+        "translationMs": 116,
+        "samplingMs": 1,
+        "totalMs": 145
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 27,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 28
+        },
+        "max": {
+          "recognitionMs": 30,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 31
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 25
+        },
+        "max": {
+          "recognitionMs": 24,
+          "translationMs": 47,
+          "samplingMs": 1,
+          "totalMs": 73
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "fr_library.jpg",
+      "passed": true,
+      "paragraphs": 3,
+      "cold": {
+        "recognitionMs": 31,
+        "translationMs": 90,
+        "samplingMs": 1,
+        "totalMs": 124
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 30,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 32
+        },
+        "max": {
+          "recognitionMs": 32,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 34
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 1,
+          "totalMs": 26
+        },
+        "max": {
+          "recognitionMs": 25,
+          "translationMs": 18,
+          "samplingMs": 1,
+          "totalMs": 45
+        },
+        "passed": true,
+        "paragraphs": 3
+      }
+    },
+    {
+      "file": "de_wet_paint.jpg",
+      "passed": false,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 24,
+        "translationMs": 91,
+        "samplingMs": 0,
+        "totalMs": 116
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 24
+        },
+        "max": {
+          "recognitionMs": 25,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 25
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "max": {
+          "recognitionMs": 21,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "passed": false,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "en_garden.jpg",
+      "passed": false,
+      "paragraphs": 6,
+      "cold": {
+        "recognitionMs": 26,
+        "translationMs": 146,
+        "samplingMs": 2,
+        "totalMs": 176
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 26,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 29
+        },
+        "max": {
+          "recognitionMs": 27,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 30
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 23,
+          "translationMs": 0,
+          "samplingMs": 2,
+          "totalMs": 27
+        },
+        "max": {
+          "recognitionMs": 23,
+          "translationMs": 32,
+          "samplingMs": 2,
+          "totalMs": 58
+        },
+        "passed": false,
+        "paragraphs": 7
+      }
+    },
+    {
+      "file": "es_emergency_dark.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 24,
+        "translationMs": 34,
+        "samplingMs": 0,
+        "totalMs": 60
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 23,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 25
+        },
+        "max": {
+          "recognitionMs": 24,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 25
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 19,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 20
+        },
+        "max": {
+          "recognitionMs": 20,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 21
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    },
+    {
+      "file": "hi_notice_dim.jpg",
+      "passed": true,
+      "paragraphs": 2,
+      "cold": {
+        "recognitionMs": 52,
+        "translationMs": 65,
+        "samplingMs": 0,
+        "totalMs": 118
+      },
+      "warm": {
+        "median": {
+          "recognitionMs": 55,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 56
+        },
+        "max": {
+          "recognitionMs": 58,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 59
+        }
+      },
+      "stream": {
+        "median": {
+          "recognitionMs": 48,
+          "translationMs": 0,
+          "samplingMs": 0,
+          "totalMs": 50
+        },
+        "max": {
+          "recognitionMs": 49,
+          "translationMs": 19,
+          "samplingMs": 0,
+          "totalMs": 68
+        },
+        "passed": true,
+        "paragraphs": 2
+      }
+    }
+  ],
+  "summary": {
+    "cold": {
+      "recognitionMs": 43,
+      "translationMs": 65,
+      "samplingMs": 1,
+      "totalMs": 116
+    },
+    "warm": {
+      "recognitionMs": 40,
+      "translationMs": 0,
+      "samplingMs": 1,
+      "totalMs": 41
+    },
+    "stream": {
+      "recognitionMs": 34,
+      "translationMs": 0,
+      "samplingMs": 1,
+      "totalMs": 35
+    }
+  }
+}
