@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Chinese, Japanese and Korean scripts and rotated text are already planned; see the README's [Limitations](https://github.com/AbhiCodebugger/live_translate#limitations). A thumbs-up on an existing issue helps prioritise it.
+        Chinese, Japanese and Korean scripts ([FAQ](https://github.com/AbhiCodebugger/live_translate#faq)) and rotated text are already planned. A thumbs-up on an existing issue helps prioritise it.
   - type: textarea
     id: problem
     attributes:

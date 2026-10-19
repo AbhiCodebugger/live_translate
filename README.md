@@ -40,8 +40,6 @@ const LiveTranslateView();
 - [Size impact](#size-impact)
 - [Example app](#example-app)
 - [Scripts and languages](#scripts-and-languages)
-- [Limitations](#limitations)
-- [Alternatives](#alternatives)
 - [FAQ](#faq)
 - [How it works](#how-it-works)
 - [Contributing](#contributing)
@@ -541,31 +539,6 @@ The example also holds replay tests, which run saved photos of real signs and pa
 - The target language's model downloads as soon as the view starts.
 - A detected language's model downloads once the language is confirmed. That's straight away for a paragraph of 20 letters or more. Otherwise it's after the language has been seen in three reads, which takes a few seconds on a steady picture.
 - Until a model arrives, its paragraphs are left untranslated. They appear as soon as it's ready, without moving the camera.
-
-## Limitations
-
-- Rear camera only.
-- Latin and Devanagari scripts only; Chinese, Japanese and Korean are planned.
-- Horizontal text only; rotated text is planned.
-- The first use of each language needs a network connection to download its model.
-- ML Kit needs a real iOS device.
-- The API follows semantic versioning: breaking changes come only in a major version.
-
-## Alternatives
-
-| | live_translate | ML Kit plugins yourself | `realtime_translation` | Cloud APIs | Google Translate app |
-|---|---|---|---|---|---|
-| What it is | One widget | `google_mlkit_text_recognition` + `google_mlkit_translation` + `camera` | A Flutter plugin (0.0.3) | Google Cloud Vision + Cloud Translation, or similar | Google's app, with its camera mode |
-| Works offline | Yes, once a language's model is downloaded | Yes | No: translates through the `translator` package, which calls the Google Translate website | No | Yes, with downloaded languages |
-| Draws the translation on the page | Yes, in the page's colours | You build it | No: returns text to your app | You build it | Yes |
-| Steady labels while the hand moves | Yes | You build it | Not applicable | You build it | Yes |
-| Detects languages and downloads models | Yes | You build it | No: you supply the language lists | Detects; nothing to download | Yes |
-| Inside your own app | Yes | Yes | Yes | Yes | No |
-| Cost | Free | Free | Free, but [unofficial](https://pub.dev/packages/translator) | Billed per use | Free |
-
-- **Building it yourself** on the ML Kit plugins gives the most control. Most of this package's code is what it takes on top of them: converting camera frames, mapping boxes onto the preview, grouping lines into paragraphs, deciding when to read, tracking camera motion, voting on languages, and fitting labels.
-- **Cloud APIs** read more scripts and translate more languages, but every read needs a network round trip, sends the picture off the phone and is billed.
-- **The Google Translate app** is the experience this package aims for, but it's a separate app, so it can't be part of your screens or flows.
 
 ## FAQ
 
